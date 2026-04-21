@@ -366,6 +366,8 @@ export class TeamsComponent implements OnInit {
     const slot = this.activeSlot();
     this.addingMember.set(true);
 
+    // switchMap en el servicio devuelve PokemonTeam[] (resultado de load())
+    // garantizando que el signal ya está actualizado antes de que llegue el next
     this.teamsService.addMember(team.id, p.id, p.name, p.imageUrl, slot).subscribe({
       next: () => {
         this.addingMember.set(false);
