@@ -5,7 +5,7 @@ import { RouterLink } from '@angular/router';
 import { TeamsService } from '../../core/services/teams.service';
 import { PokemonService } from '../../core/services/pokemon.service';
 import { PokemonTeam } from '../../core/models/pokemon.model';
-import { debounceTime, distinctUntilChanged, switchMap, of } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, of, catchError } from 'rxjs';
 import { Subject } from 'rxjs';
 
 interface PickerResult {
@@ -291,27 +291,26 @@ export class TeamsComponent implements OnInit {
       debounceTime(350),
       distinctUntilChanged(),
       switchMap(query => {
-        if (!query.trim()) return of(null);
-        this.pickerLoading.set(true);
-        return this.pokemonService.getDetail(query.toLowerCase().trim());
-      })
-    ).subscribe({
-      next: detail => {
-        this.pickerLoading.set(false);
-        if (detail) {
-          this.pickerResults.set([{
-            id: detail.id,
-            name: detail.name,
-            imageUrl:
-              detail.sprites?.other?.['official-artwork']?.front_default ??
-              this.pokemonService.getPokemonImageUrl(detail.id),
-          }]);
-        } else {
-          this.pickerResults.set([]);
+        if (!query.trim()) {
+          this.pickerLoading.set(false);
+          return of(null);
         }
-      },
-      error: () => {
-        this.pickerLoading.set(false);
+        this.pickerLoading.set(true);
+        return this.pokemonService.getDetail(query.toLowerCase().trim()).pipe(
+          catchError(() => of(null))  // error dentro del switchMap para que el Subject no muera
+        );
+      })
+    ).subscribe(detail => {
+      this.pickerLoading.set(false);
+      if (detail) {
+        this.pickerResults.set([{
+          id: detail.id,
+          name: detail.name,
+          imageUrl:
+            detail.sprites?.other?.['official-artwork']?.front_default ??
+            this.pokemonService.getPokemonImageUrl(detail.id),
+        }]);
+      } else {
         this.pickerResults.set([]);
       }
     });
