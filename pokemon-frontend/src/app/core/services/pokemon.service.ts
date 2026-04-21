@@ -6,15 +6,15 @@ import { PokemonListResponse, PokemonDetail } from '../models/pokemon.model';
 @Injectable({ providedIn: 'root' })
 export class PokemonService {
   private http = inject(HttpClient);
-  private base = 'http://localhost:5279/api';
+  private pokeApi = 'https://pokeapi.co/api/v2';
 
-  getList(limit = 20, offset = 0): Observable<PokemonListResponse> {
+  getList(limit = 40, offset = 0): Observable<PokemonListResponse> {
     const params = new HttpParams().set('limit', limit).set('offset', offset);
-    return this.http.get<PokemonListResponse>(`${this.base}/pokemon`, { params });
+    return this.http.get<PokemonListResponse>(`${this.pokeApi}/pokemon`, { params });
   }
 
   getDetail(idOrName: string | number): Observable<PokemonDetail> {
-    return this.http.get<PokemonDetail>(`${this.base}/pokemon/${idOrName}`);
+    return this.http.get<PokemonDetail>(`${this.pokeApi}/pokemon/${idOrName}`);
   }
 
   getPokemonImageUrl(id: number): string {
