@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { tap } from 'rxjs/operators';
+import { switchMap, tap } from 'rxjs/operators';
 import { Favorite } from '../models/pokemon.model';
 
 @Injectable({ providedIn: 'root' })
@@ -9,22 +9,26 @@ export class FavoritesService {
   private base = 'http://localhost:5279/api/favorites';
 
   favorites = signal<Favorite[]>([]);
+  loaded = signal(false);
 
   load() {
     return this.http.get<Favorite[]>(this.base).pipe(
-      tap(data => this.favorites.set(data))
+      tap(data => {
+        this.favorites.set(data);
+        this.loaded.set(true);
+      })
     );
   }
 
   add(pokemonId: number, pokemonName: string, pokemonImageUrl: string) {
     return this.http.post<Favorite>(this.base, { pokemonId, pokemonName, pokemonImageUrl }).pipe(
-      tap(() => this.load().subscribe())
+      switchMap(() => this.load())
     );
   }
 
   remove(pokemonId: number) {
     return this.http.delete(`${this.base}/${pokemonId}`).pipe(
-      tap(() => this.favorites.update(f => f.filter(x => x.pokemonId !== pokemonId)))
+      switchMap(() => this.load())
     );
   }
 
