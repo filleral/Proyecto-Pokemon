@@ -6,7 +6,7 @@ import { PokemonTeam } from '../models/pokemon.model';
 @Injectable({ providedIn: 'root' })
 export class TeamsService {
   private http = inject(HttpClient);
-  private base = 'http://localhost:5000/api/teams';
+  private base = 'http://localhost:5279/api/teams';
 
   teams = signal<PokemonTeam[]>([]);
 

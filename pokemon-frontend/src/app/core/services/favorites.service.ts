@@ -6,7 +6,7 @@ import { Favorite } from '../models/pokemon.model';
 @Injectable({ providedIn: 'root' })
 export class FavoritesService {
   private http = inject(HttpClient);
-  private base = 'http://localhost:5000/api/favorites';
+  private base = 'http://localhost:5279/api/favorites';
 
   favorites = signal<Favorite[]>([]);
 

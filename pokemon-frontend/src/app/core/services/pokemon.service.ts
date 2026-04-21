@@ -6,7 +6,7 @@ import { PokemonListResponse, PokemonDetail } from '../models/pokemon.model';
 @Injectable({ providedIn: 'root' })
 export class PokemonService {
   private http = inject(HttpClient);
-  private base = 'http://localhost:5000/api';
+  private base = 'http://localhost:5279/api';
 
   getList(limit = 20, offset = 0): Observable<PokemonListResponse> {
     const params = new HttpParams().set('limit', limit).set('offset', offset);

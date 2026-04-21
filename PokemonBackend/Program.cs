@@ -19,7 +19,9 @@ builder.Services.AddHttpClient<PokeApiService>(client =>
 
 builder.Services.AddCors(opt =>
     opt.AddDefaultPolicy(policy =>
-        policy.WithOrigins("http://localhost:4200", "https://localhost:4200")
+        policy.WithOrigins(
+                "http://localhost:4200", "https://localhost:4200",
+                "http://localhost:51225", "https://localhost:51225")
               .AllowAnyMethod()
               .AllowAnyHeader()));
 
