@@ -1,0 +1,25 @@
+# Angular
+pokemon-frontend/node_modules/
+pokemon-frontend/dist/
+pokemon-frontend/.angular/
+
+# .NET
+PokemonBackend/bin/
+PokemonBackend/obj/
+PokemonBackend/*.db
+PokemonBackend/*.db-shm
+PokemonBackend/*.db-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.user
+
+# Logs
+*.log
+npm-debug.log*
+.claude
