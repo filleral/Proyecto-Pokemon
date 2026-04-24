@@ -38,3 +38,8 @@ public record OfficialArtworkImages(string? FrontDefault, string? FrontShiny);
 public record AddFavoriteRequest(int PokemonId, string PokemonName, string PokemonImageUrl);
 public record CreateTeamRequest(string Name);
 public record AddTeamMemberRequest(int PokemonId, string PokemonName, string PokemonImageUrl, int Slot);
+public record UpdateMemberRequest(
+    string? HeldItem, string? Ability, string? Nature,
+    string? Move1, string? Move2, string? Move3, string? Move4,
+    int EvHp, int EvAtk, int EvDef, int EvSpAtk, int EvSpDef, int EvSpeed,
+    int IvHp, int IvAtk, int IvDef, int IvSpAtk, int IvSpDef, int IvSpeed);

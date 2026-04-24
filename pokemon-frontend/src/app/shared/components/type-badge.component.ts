@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { TYPE_COLORS } from '../../core/models/pokemon.model';
+import { TYPE_COLORS, TYPE_NAMES_ES } from '../../core/models/pokemon.model';
 
 @Component({
   selector: 'app-type-badge',
@@ -8,7 +8,7 @@ import { TYPE_COLORS } from '../../core/models/pokemon.model';
   imports: [CommonModule],
   template: `
     <span class="type-badge" [style.background]="color" [style.color]="textColor">
-      {{ type }}
+      {{ typeName }}
     </span>
   `,
   styles: [`
@@ -25,6 +25,8 @@ import { TYPE_COLORS } from '../../core/models/pokemon.model';
 })
 export class TypeBadgeComponent {
   @Input() type = '';
+
+  get typeName(): string { return TYPE_NAMES_ES[this.type] ?? this.type; }
 
   get color(): string {
     return TYPE_COLORS[this.type] ?? '#888';

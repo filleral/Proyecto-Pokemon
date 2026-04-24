@@ -34,6 +34,17 @@ export class TeamsService {
     );
   }
 
+  updateMember(teamId: number, memberId: number, data: {
+    heldItem?: string|null; ability?: string|null; nature?: string|null;
+    move1?: string|null; move2?: string|null; move3?: string|null; move4?: string|null;
+    evHp: number; evAtk: number; evDef: number; evSpAtk: number; evSpDef: number; evSpeed: number;
+    ivHp: number; ivAtk: number; ivDef: number; ivSpAtk: number; ivSpDef: number; ivSpeed: number;
+  }) {
+    return this.http.put(`${this.base}/${teamId}/members/${memberId}`, data).pipe(
+      switchMap(() => this.load())
+    );
+  }
+
   deleteTeam(teamId: number) {
     return this.http.delete(`${this.base}/${teamId}`).pipe(
       switchMap(() => this.load())
