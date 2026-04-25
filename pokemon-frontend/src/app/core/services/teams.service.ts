@@ -50,4 +50,19 @@ export class TeamsService {
       switchMap(() => this.load())
     );
   }
+
+  importTeam(payload: {
+    name: string;
+    members: Array<{
+      pokemonId: number; pokemonName: string; pokemonImageUrl: string; slot: number;
+      heldItem?: string|null; ability?: string|null; nature?: string|null;
+      move1?: string|null; move2?: string|null; move3?: string|null; move4?: string|null;
+      evHp: number; evAtk: number; evDef: number; evSpAtk: number; evSpDef: number; evSpeed: number;
+      ivHp: number; ivAtk: number; ivDef: number; ivSpAtk: number; ivSpDef: number; ivSpeed: number;
+    }>;
+  }) {
+    return this.http.post<PokemonTeam>(`${this.base}/import`, payload).pipe(
+      switchMap(() => this.load())
+    );
+  }
 }

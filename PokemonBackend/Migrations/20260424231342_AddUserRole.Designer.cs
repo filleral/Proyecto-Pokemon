@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PokemonBackend.Data;
 
@@ -11,9 +12,11 @@ using PokemonBackend.Data;
 namespace PokemonBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260424231342_AddUserRole")]
+    partial class AddUserRole
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -153,47 +156,6 @@ namespace PokemonBackend.Migrations
                     b.ToTable("Teams");
                 });
 
-            modelBuilder.Entity("PokemonBackend.Models.Role", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Roles");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Description = "Plan gratuito",
-                            Name = "free"
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Description = "Plan premium $1/mes",
-                            Name = "premium"
-                        },
-                        new
-                        {
-                            Id = 3,
-                            Description = "Administrador",
-                            Name = "admin"
-                        });
-                });
-
             modelBuilder.Entity("PokemonBackend.Models.TeamMember", b =>
                 {
                     b.Property<int>("Id")
@@ -291,30 +253,12 @@ namespace PokemonBackend.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Bio")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<bool>("DarkMode")
-                        .HasColumnType("bit");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("FavoriteGame")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("FavoritePokemonId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("FavoritePokemonImageUrl")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("FavoritePokemonName")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("GoogleId")
                         .IsRequired()
@@ -327,8 +271,9 @@ namespace PokemonBackend.Migrations
                     b.Property<string>("PictureUrl")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("RoleId")
-                        .HasColumnType("int");
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -337,8 +282,6 @@ namespace PokemonBackend.Migrations
 
                     b.HasIndex("GoogleId")
                         .IsUnique();
-
-                    b.HasIndex("RoleId");
 
                     b.ToTable("Users");
                 });
@@ -398,17 +341,6 @@ namespace PokemonBackend.Migrations
                     b.Navigation("Team");
                 });
 
-            modelBuilder.Entity("PokemonBackend.Models.User", b =>
-                {
-                    b.HasOne("PokemonBackend.Models.Role", "Role")
-                        .WithMany("Users")
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Role");
-                });
-
             modelBuilder.Entity("PokemonBackend.Models.GameProgress", b =>
                 {
                     b.Navigation("CaughtPokemons");
@@ -417,11 +349,6 @@ namespace PokemonBackend.Migrations
             modelBuilder.Entity("PokemonBackend.Models.PokemonTeam", b =>
                 {
                     b.Navigation("Members");
-                });
-
-            modelBuilder.Entity("PokemonBackend.Models.Role", b =>
-                {
-                    b.Navigation("Users");
                 });
 
             modelBuilder.Entity("PokemonBackend.Models.User", b =>

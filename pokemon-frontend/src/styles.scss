@@ -47,3 +47,273 @@ a {
 img {
   max-width: 100%;
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   DARK MODE
+   Specificity trick: html.dark .class = (0,2,1) > Angular's .class[_ngcontent] = (0,2,0)
+   ════════════════════════════════════════════════════════════════════ */
+/* ── Base ────────────────────────────────────────────────────────── */
+html.dark body { background: #0d0d1a; color: #e0e0f0; }
+html.dark ::-webkit-scrollbar-thumb { background: #2a2a3e; }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #3a3a52; }
+
+/* ── Common text & titles ────────────────────────────────────────── */
+html.dark .page-title   { color: #e8e8f8 !important; }
+html.dark .page-subtitle { color: #666 !important; }
+html.dark .section-title { color: #e0e0f0 !important; }
+html.dark .empty-state  { color: #3a3a4a !important; }
+html.dark .empty-state svg { stroke: #2a2a3e !important; }
+html.dark .back-btn     { color: #888 !important; background: rgba(255,255,255,.06) !important; }
+
+/* ── Generic inputs & selects ────────────────────────────────────── */
+html.dark input, html.dark select, html.dark textarea {
+  background: #12102a !important;
+  border-color: rgba(255,255,255,0.1) !important;
+  color: #e0e0f0 !important;
+}
+html.dark input::placeholder, html.dark textarea::placeholder { color: #3a3a50 !important; }
+
+/* ── Shared buttons ──────────────────────────────────────────────── */
+html.dark .btn-cancel  { background: rgba(255,255,255,0.07) !important; color: #999 !important; }
+html.dark .btn-cancel:hover { background: rgba(255,255,255,0.12) !important; }
+html.dark .icon-btn    { color: #3a3a50 !important; }
+html.dark .icon-btn.danger:hover { color: #e63946 !important; background: rgba(230,57,70,.1) !important; }
+
+/* ════════════════════════════════════════════════════════════════════
+   POKÉMON LIST
+   ════════════════════════════════════════════════════════════════════ */
+html.dark .search-input { background: #1a1a2e !important; border-color: rgba(255,255,255,0.1) !important; color: #e0e0f0 !important; }
+html.dark .search-icon  { color: #3a3a50 !important; }
+html.dark .gen-tabs, html.dark .filter-row { background: #1a1a2e !important; box-shadow: 0 1px 4px rgba(0,0,0,.4) !important; }
+html.dark .gen-tab      { border-color: rgba(255,255,255,0.08) !important; color: #666 !important; }
+html.dark .gen-tab.active { background: #e63946 !important; border-color: #e63946 !important; color: white !important; }
+html.dark .filter-label { color: #3a3a50 !important; }
+html.dark .sort-select  { background: #12102a !important; border-color: rgba(255,255,255,0.08) !important; color: #e0e0f0 !important; }
+html.dark .btn-clear    { border-color: rgba(255,255,255,0.08) !important; color: #555 !important; background: transparent !important; }
+html.dark .page-btn     { background: #1a1a2e !important; }
+html.dark .page-num     { background: #1a1a2e !important; border-color: rgba(255,255,255,0.08) !important; color: #888 !important; }
+html.dark .page-info    { color: #444 !important; }
+html.dark .stat-banner.hint { background: rgba(255,255,255,0.04) !important; border-color: rgba(255,255,255,0.06) !important; color: #555 !important; }
+html.dark .skeleton-card { background: linear-gradient(90deg,#1a1a2e 25%,#22223e 50%,#1a1a2e 75%) !important; background-size: 200% 100% !important; }
+/* Pokémon card body (component-scoped .card has white bg) */
+html.dark .card         { background: #1a1a2e !important; box-shadow: 0 2px 12px rgba(0,0,0,.4) !important; }
+html.dark .card .pokemon-id   { color: #3a3a50 !important; }
+html.dark .card .pokemon-name { color: #e0e0f0 !important; }
+
+/* ════════════════════════════════════════════════════════════════════
+   POKÉMON DETAIL
+   ════════════════════════════════════════════════════════════════════ */
+html.dark .detail-tabs  { background: #1a1a2e !important; box-shadow: 0 2px 8px rgba(0,0,0,.4) !important; }
+html.dark .tab-btn      { color: #555 !important; }
+html.dark .tab-btn:hover { background: rgba(255,255,255,0.05) !important; color: #aaa !important; }
+html.dark .tab-btn.active { background: #1a1a2e !important; color: #e8e8f8 !important; }
+html.dark .card-section { background: #1a1a2e !important; box-shadow: 0 2px 12px rgba(0,0,0,.4) !important; }
+/* Hero text: gradient bg is always light-colored so keep text dark */
+html.dark .hero .pokemon-id   { color: rgba(26,26,46,0.55) !important; }
+html.dark .hero .pokemon-name { color: #1a1a2e !important; }
+html.dark .hero .qs-value     { color: #1a1a2e !important; }
+html.dark .hero .qs-label     { color: rgba(26,26,46,0.5) !important; }
+/* Non-hero .pokemon-name (e.g. evolution chain labels) */
+html.dark .pokemon-name { color: #e8e8f8 !important; }
+html.dark .qs-value     { color: #e8e8f8 !important; }
+html.dark .qs-label     { color: #555 !important; }
+html.dark .qs-divider   { background: rgba(255,255,255,0.08) !important; }
+html.dark .fav-btn-hero { background: rgba(255,255,255,0.08) !important; border-color: rgba(255,255,255,0.15) !important; color: #aaa !important; }
+/* Stat table */
+html.dark .stat-table-header { border-bottom-color: rgba(255,255,255,0.07) !important; }
+html.dark .sh-label, html.dark .sh-val, html.dark .sh-base { color: #555 !important; }
+html.dark .stat-name    { color: #666 !important; }
+html.dark .stat-bar-bg  { background: rgba(255,255,255,0.07) !important; }
+html.dark .stat-legend  { border-top-color: rgba(255,255,255,0.07) !important; }
+html.dark .legend-item  { color: #444 !important; }
+/* Ability cards */
+html.dark .ability-card { background: #12102a !important; border-left-color: rgba(255,255,255,0.15) !important; }
+html.dark .ab-name      { color: #e0e0f0 !important; }
+html.dark .ab-desc      { color: #999 !important; }
+html.dark .ab-how       { color: #555 !important; }
+html.dark .sprite-label { color: #555 !important; }
+/* Type chart */
+html.dark .chart-subtitle { color: #555 !important; }
+html.dark .off-type-block { border-bottom-color: rgba(255,255,255,0.05) !important; }
+/* Evolution chain */
+html.dark .evo-sprite-wrap { background: #12102a !important; }
+html.dark .evo-name     { color: #e0e0f0 !important; }
+html.dark .evo-trigger  { color: #444 !important; }
+/* Encounter locations */
+html.dark .enc-locations { background: #12102a !important; }
+html.dark .enc-location-item { color: #999 !important; }
+html.dark .enc-loc-level { color: #555 !important; background: rgba(255,255,255,0.06) !important; }
+html.dark .enc-loc-method { color: #444 !important; }
+html.dark .vg-pill      { background: #12102a !important; border-color: rgba(255,255,255,0.1) !important; color: #777 !important; }
+/* Move list */
+html.dark .move-row--header { background: #12102a !important; color: #555 !important; }
+html.dark .move-row:nth-child(even) { background: rgba(255,255,255,0.03) !important; }
+html.dark .mr-name      { color: #d0d0e8 !important; }
+html.dark .move-chip    { background: rgba(255,255,255,0.06) !important; color: #888 !important; }
+
+/* ════════════════════════════════════════════════════════════════════
+   FAVORITES
+   ════════════════════════════════════════════════════════════════════ */
+html.dark .fav-card     { background: #1a1a2e !important; box-shadow: 0 2px 8px rgba(0,0,0,.35) !important; border-color: rgba(255,255,255,0.06) !important; }
+html.dark .fav-name     { color: #e0e0f0 !important; }
+html.dark .fav-id       { color: #3a3a50 !important; }
+html.dark .remove-btn   { color: #2a2a3e !important; }
+html.dark .remove-btn:hover { color: #e63946 !important; }
+html.dark .loading-state, html.dark .error-state { color: #3a3a50 !important; }
+html.dark .error-state h3, html.dark .empty-state h3 { color: #555 !important; }
+
+/* ════════════════════════════════════════════════════════════════════
+   PROGRESS LIST
+   ════════════════════════════════════════════════════════════════════ */
+html.dark .progress-card { background: #1a1a2e !important; box-shadow: 0 2px 10px rgba(0,0,0,.35) !important; border-color: rgba(255,255,255,0.06) !important; }
+html.dark .card-trainer  { color: #e0e0f0 !important; }
+html.dark .card-date     { color: #3a3a50 !important; }
+html.dark .stat-num      { color: #e0e0f0 !important; }
+html.dark .stat-lbl      { color: #3a3a50 !important; }
+html.dark .card-delete   { background: rgba(255,255,255,0.05) !important; color: #2a2a3e !important; }
+html.dark .card-delete:hover { color: #e63946 !important; background: rgba(230,57,70,.08) !important; }
+html.dark .form-label    { color: #666 !important; }
+html.dark .form-input    { background: #12102a !important; border-color: rgba(255,255,255,0.1) !important; color: #e0e0f0 !important; }
+html.dark .modal         { background: #1a1a2e !important; }
+html.dark .modal-title   { color: #e8e8f8 !important; }
+html.dark .selected-game-name { color: #999 !important; }
+html.dark .confirm-title { color: #e8e8f8 !important; }
+html.dark .confirm-msg   { color: #555 !important; }
+
+/* ════════════════════════════════════════════════════════════════════
+   PROGRESS DETAIL
+   ════════════════════════════════════════════════════════════════════ */
+html.dark .stats-bar     { background: #1a1a2e !important; border-bottom-color: rgba(255,255,255,0.07) !important; }
+html.dark .actions-bar   { background: #1a1a2e !important; border-bottom-color: rgba(255,255,255,0.07) !important; }
+html.dark .search-wrap .search-input { background: #12102a !important; border-color: rgba(255,255,255,0.1) !important; color: #e0e0f0 !important; }
+html.dark .search-wrap .search-input::placeholder { color: #3a3a50 !important; }
+html.dark .search-wrap .search-icon { color: #3a3a50 !important; }
+html.dark .search-wrap .search-clear { color: #3a3a50 !important; }
+html.dark .finished-badge { background: rgba(46,125,50,0.15) !important; color: #86efac !important; }
+html.dark .chip-num      { color: #e0e0f0 !important; }
+html.dark .progress-bar  { background: rgba(255,255,255,0.07) !important; }
+html.dark .filter-row    { background: #1a1a2e !important; border-bottom-color: rgba(255,255,255,0.07) !important; }
+html.dark .filter-btn    { border-color: rgba(255,255,255,0.08) !important; color: #555 !important; }
+html.dark .filter-btn.active { background: #e63946 !important; border-color: #e63946 !important; color: white !important; }
+/* Box sections */
+html.dark .box-section   { background: #1a1a2e !important; box-shadow: 0 2px 12px rgba(0,0,0,.4) !important; }
+html.dark .box-header    { background: #12102a !important; color: #555 !important; border-bottom-color: rgba(255,255,255,0.07) !important; }
+/* Dex cells */
+html.dark .dex-cell      { border-color: rgba(255,255,255,0.05) !important; }
+html.dark .dex-cell:hover { background: rgba(255,255,255,0.04) !important; }
+html.dark .cell-num      { color: #2a2a3e !important; }
+html.dark .cell-name     { color: #999 !important; }
+html.dark .state-seen    { background: rgba(59,130,246,0.12) !important; }
+html.dark .state-caught  { background: rgba(34,197,94,0.12) !important; }
+html.dark .state-shiny   { background: rgba(251,191,36,0.1) !important; }
+/* Dex modal */
+html.dark .modal-num     { color: #3a3a50 !important; }
+html.dark .modal-name    { color: #e8e8f8 !important; }
+html.dark .action-btn    { border-color: rgba(255,255,255,0.08) !important; color: #e0e0f0 !important; }
+html.dark .action-btn:hover { border-color: rgba(255,255,255,0.2) !important; }
+html.dark .btn-close     { border-color: rgba(255,255,255,0.08) !important; color: #555 !important; }
+html.dark .types-loading { color: #3a3a50 !important; }
+/* Action buttons in detail */
+html.dark .act-catchall  { background: rgba(26,86,219,0.2) !important; color: #93c5fd !important; border-color: rgba(26,86,219,0.3) !important; }
+html.dark .act-reset     { background: rgba(198,40,40,0.18) !important; color: #fca5a5 !important; border-color: rgba(198,40,40,0.3) !important; }
+html.dark .act-finish    { background: rgba(46,125,50,0.2) !important; color: #86efac !important; border-color: rgba(46,125,50,0.3) !important; }
+html.dark .act-resume    { background: rgba(21,101,192,0.2) !important; color: #93c5fd !important; border-color: rgba(21,101,192,0.3) !important; }
+/* Encounter modal */
+html.dark .ds-bar-bg     { background: rgba(255,255,255,0.07) !important; }
+html.dark .enc-game-block { border-color: rgba(255,255,255,0.06) !important; }
+html.dark .enc-game-header { background: #12102a !important; }
+html.dark .enc-loc-row   { border-top-color: rgba(255,255,255,0.05) !important; }
+html.dark .enc-loc-name  { color: #999 !important; }
+html.dark .enc-loc-lv    { color: #444 !important; }
+html.dark .dm-no-enc     { color: #2a2a3e !important; }
+
+/* ════════════════════════════════════════════════════════════════════
+   SUBSCRIPTION
+   ════════════════════════════════════════════════════════════════════ */
+html.dark .sub-title     { color: #e8e8f8 !important; }
+html.dark .sub-subtitle  { color: #666 !important; }
+html.dark .trial-banner  { background: rgba(251,191,36,0.1) !important; border-color: rgba(251,191,36,0.2) !important; color: #fbbf24 !important; }
+html.dark .free-card     { background: #1a1a2e !important; border-color: rgba(255,255,255,0.08) !important; }
+html.dark .plan-badge    { color: #666 !important; }
+html.dark .free-badge    { background: rgba(255,255,255,0.06) !important; color: #555 !important; }
+html.dark .price-amount  { color: #e8e8f8 !important; }
+html.dark .price-period  { color: #555 !important; }
+html.dark .feat, html.dark .feat-ok { color: #888 !important; }
+html.dark .feat-no       { color: #2a2a3e !important; }
+html.dark .plan-current  { background: #1a1a2e !important; color: #2a2a3e !important; border-color: rgba(255,255,255,0.06) !important; }
+html.dark .fine-print    { color: #3a3a50 !important; }
+
+/* ════════════════════════════════════════════════════════════════════
+   TEAMS
+   ════════════════════════════════════════════════════════════════════ */
+html.dark .import-btn { background: #1a1a2e !important; border-color: rgba(255,255,255,.1) !important; color: #888 !important; }
+html.dark .import-btn:hover { border-color: #1976d2 !important; color: #64b5f6 !important; background: rgba(25,118,210,.1) !important; }
+html.dark .drop-zone { border-color: rgba(255,255,255,.12) !important; color: #3a3a50 !important; }
+html.dark .drop-zone.drag-over { border-color: #1976d2 !important; background: rgba(25,118,210,.06) !important; }
+html.dark .drop-text { color: #555 !important; }
+html.dark .file-label { background: #12102a !important; color: #777 !important; }
+html.dark .import-preview { background: #12102a !important; }
+html.dark .preview-pname { color: #e0e0f0 !important; }
+html.dark .preview-meta, html.dark .preview-moves { color: #3a3a50 !important; }
+html.dark .team-card { background: #1a1a2e !important; border-color: rgba(255,255,255,0.07) !important; box-shadow: 0 2px 16px rgba(0,0,0,.35) !important; }
+html.dark .team-name { color: #e8e8f8 !important; }
+html.dark .count-filled { background: #2a2a3e !important; }
+html.dark .team-count-label { background: rgba(255,255,255,0.06) !important; color: #555 !important; }
+html.dark .slot-filled { background: #12102a !important; border-color: rgba(255,255,255,0.06) !important; }
+html.dark .slot-empty  { border-color: rgba(255,255,255,0.08) !important; color: rgba(255,255,255,0.18) !important; }
+html.dark .slot-empty:hover { border-color: #e63946 !important; color: #e63946 !important; background: rgba(230,57,70,.03) !important; }
+html.dark .slot-name   { color: #e0e0f0 !important; }
+html.dark .slot-build-btn { background: rgba(255,255,255,0.08) !important; color: #ccc !important; }
+html.dark .slot-build-btn:hover { background: rgba(255,255,255,0.13) !important; }
+html.dark .slot-item   { background: #1c1406 !important; border-color: rgba(253,230,138,0.15) !important; color: #c89030 !important; }
+html.dark .move-pill   { background: rgba(255,255,255,0.06) !important; color: #666 !important; }
+html.dark .nature-chip { background: #1e1a3a !important; color: #a5b4fc !important; }
+html.dark .ability-chip { background: #0d1f12 !important; color: #6ee7b7 !important; }
+/* Modals */
+html.dark .modal         { background: #1a1a2e !important; }
+html.dark .modal-title   { color: #e8e8f8 !important; }
+html.dark .modal-input   { background: #12102a !important; border-color: rgba(255,255,255,0.1) !important; color: #e0e0f0 !important; }
+html.dark .edit-modal    { background: #1a1a2e !important; }
+html.dark .edit-header   { background: #12102a !important; border-bottom-color: rgba(255,255,255,0.06) !important; }
+html.dark .edit-poke-name { color: #e8e8f8 !important; }
+html.dark .edit-footer   { background: #1a1a2e !important; border-top-color: rgba(255,255,255,0.06) !important; }
+html.dark .edit-section-title { color: #444 !important; }
+html.dark .edit-select, html.dark .edit-input { background: #12102a !important; border-color: rgba(255,255,255,0.09) !important; color: #e0e0f0 !important; }
+html.dark .ability-pill  { background: #12102a !important; border-color: rgba(255,255,255,0.09) !important; color: #888 !important; }
+html.dark .ability-pill:hover { border-color: #1976d2 !important; color: #64b5f6 !important; }
+html.dark .ability-pill.active { background: #1976d2 !important; color: white !important; }
+html.dark .stat-input    { background: #12102a !important; border-color: rgba(255,255,255,0.09) !important; color: #e0e0f0 !important; }
+html.dark .stat-label    { color: #444 !important; }
+html.dark .ev-mini-bar-bg { background: rgba(255,255,255,0.06) !important; }
+html.dark .ev-total      { color: #64b5f6 !important; }
+html.dark .ev-bar-total  { background: rgba(255,255,255,0.06) !important; }
+html.dark .item-panel    { background: #1a1306 !important; border-color: rgba(253,230,138,0.12) !important; }
+html.dark .move-panel    { background: #110d26 !important; border-color: rgba(196,181,253,0.15) !important; }
+html.dark .panel-divider { background: rgba(255,255,255,0.06) !important; }
+html.dark .chip          { background: #12102a !important; border-color: rgba(255,255,255,0.09) !important; color: #ccc !important; }
+html.dark .item-chip:hover { background: #1a1306 !important; }
+html.dark .move-chip:hover { background: #1a1030 !important; }
+html.dark .picker-modal  { background: #1a1a2e !important; }
+html.dark .picker-input  { background: #12102a !important; border-color: rgba(255,255,255,0.09) !important; color: #e0e0f0 !important; }
+html.dark .picker-item:hover:not(.already-in) { background: rgba(255,255,255,0.03) !important; }
+html.dark .picker-name   { color: #e0e0f0 !important; }
+html.dark .picker-id     { color: #3a3a50 !important; }
+html.dark .picker-hint   { color: #3a3a50 !important; }
+html.dark .in-team-tag   { background: rgba(255,255,255,0.05) !important; color: #555 !important; }
+html.dark .paywall-modal { background: #1a1a2e !important; }
+html.dark .paywall-title { color: #e8e8f8 !important; }
+html.dark .paywall-msg   { color: #777 !important; }
+html.dark .pw-cancel     { background: rgba(255,255,255,0.07) !important; color: #888 !important; }
+html.dark .analysis-modal { background: #1a1a2e !important; }
+html.dark .an-stitle     { color: #3a3a50 !important; border-bottom-color: rgba(255,255,255,0.05) !important; }
+html.dark .an-member     { background: #12102a !important; border-color: rgba(255,255,255,0.06) !important; }
+html.dark .an-mname      { color: #555 !important; }
+html.dark .an-threat-row { background: #12102a !important; border-color: rgba(255,255,255,0.06) !important; }
+html.dark .an-threat-row.t-crit { background: rgba(230,57,70,.08) !important; border-color: rgba(230,57,70,.18) !important; }
+html.dark .an-threat-row.t-notable { background: rgba(255,152,0,.07) !important; border-color: rgba(255,152,0,.15) !important; }
+html.dark .an-legend     { color: #3a3a50 !important; }
+html.dark .an-cov-lbl    { background: rgba(255,255,255,0.06) !important; color: #777 !important; }
+html.dark .an-tip        { background: #12102a !important; border-color: rgba(255,255,255,0.06) !important; color: #aaa !important; }
+html.dark .an-empty      { color: #3a3a50 !important; }
+html.dark .confirm-title { color: #e8e8f8 !important; }
+html.dark .confirm-msg   { color: #555 !important; }

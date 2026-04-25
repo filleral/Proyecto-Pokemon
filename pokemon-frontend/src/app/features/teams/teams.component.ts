@@ -1,10 +1,12 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { TeamsService } from '../../core/services/teams.service';
 import { PokemonService } from '../../core/services/pokemon.service';
+import { AuthService } from '../../core/services/auth.service';
 import { PokemonTeam, TeamMember } from '../../core/models/pokemon.model';
-import { debounceTime, distinctUntilChanged, switchMap, of, catchError } from 'rxjs';
+import { debounceTime, distinctUntilChanged, switchMap, of, catchError, forkJoin } from 'rxjs';
 import { Subject } from 'rxjs';
 
 // ── Natures ──────────────────────────────────────────────────────────────────
@@ -414,8 +416,57 @@ function getRecommendedMoves(
   return scored.slice(0,10).map(s=>s.name);
 }
 
+// ── Type Effectiveness (Gen 6+) ──────────────────────────────────────────────
+const TYPE_EFF: Record<string, Record<string, number>> = {
+  normal:   { rock:.5, steel:.5, ghost:0 },
+  fire:     { fire:.5, water:.5, rock:.5, dragon:.5, grass:2, ice:2, bug:2, steel:2 },
+  water:    { water:.5, grass:.5, dragon:.5, fire:2, ground:2, rock:2 },
+  electric: { electric:.5, grass:.5, dragon:.5, ground:0, flying:2, water:2 },
+  grass:    { fire:.5, grass:.5, poison:.5, flying:.5, bug:.5, dragon:.5, steel:.5, water:2, ground:2, rock:2 },
+  ice:      { fire:.5, water:.5, ice:.5, steel:.5, grass:2, ground:2, flying:2, dragon:2 },
+  fighting: { poison:.5, flying:.5, psychic:.5, bug:.5, fairy:.5, ghost:0, normal:2, ice:2, rock:2, dark:2, steel:2 },
+  poison:   { poison:.5, ground:.5, rock:.5, ghost:.5, steel:0, grass:2, fairy:2 },
+  ground:   { grass:.5, bug:.5, flying:0, fire:2, electric:2, poison:2, rock:2, steel:2 },
+  flying:   { electric:.5, rock:.5, steel:.5, grass:2, fighting:2, bug:2 },
+  psychic:  { psychic:.5, steel:.5, dark:0, fighting:2, poison:2 },
+  bug:      { fire:.5, fighting:.5, flying:.5, ghost:.5, steel:.5, fairy:.5, grass:2, psychic:2, dark:2 },
+  rock:     { fighting:.5, ground:.5, steel:.5, fire:2, ice:2, flying:2, bug:2 },
+  ghost:    { normal:0, dark:.5, ghost:2, psychic:2 },
+  dragon:   { steel:.5, fairy:0, dragon:2 },
+  dark:     { fighting:.5, dark:.5, fairy:.5, ghost:2, psychic:2 },
+  steel:    { fire:.5, water:.5, electric:.5, steel:.5, ice:2, rock:2, fairy:2 },
+  fairy:    { fire:.5, poison:.5, steel:.5, fighting:2, dragon:2, dark:2 },
+};
+
+const TYPE_NAMES_ES: Record<string,string> = {
+  normal:'Normal',fire:'Fuego',water:'Agua',electric:'Eléctrico',grass:'Planta',
+  ice:'Hielo',fighting:'Lucha',poison:'Veneno',ground:'Tierra',flying:'Volador',
+  psychic:'Psíquico',bug:'Bicho',rock:'Roca',ghost:'Fantasma',dragon:'Dragón',
+  dark:'Siniestro',steel:'Acero',fairy:'Hada',
+};
+
+const ALL_TYPES = ['normal','fire','water','electric','grass','ice','fighting',
+  'poison','ground','flying','psychic','bug','rock','ghost','dragon','dark','steel','fairy'] as const;
+
+function getDefEff(atkType: string, defTypes: string[]): number {
+  const row = TYPE_EFF[atkType] ?? {};
+  return defTypes.reduce((m, dt) => m * (row[dt] ?? 1), 1);
+}
+
 // ── Interfaces ───────────────────────────────────────────────────────────────
 interface PickerResult { id:number; name:string; imageUrl:string; }
+
+// ── Analysis interfaces ──────────────────────────────────────────────────────
+interface MemberTypeInfo { name: string; types: string[]; }
+interface DefStat { type:string; weak:number; quad:number; resist:number; immune:number; neutral:number; }
+interface TeamAnalysis {
+  memberTypes: MemberTypeInfo[];
+  threats:     DefStat[];
+  goodResists: DefStat[];
+  stabCoverage: string[];
+  moveCoverage: string[];
+  tips: string[];
+}
 
 interface EditForm {
   memberId:number; teamId:number;
@@ -432,15 +483,25 @@ interface EditForm {
 @Component({
   selector: 'app-teams',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="page">
       <div class="page-header">
         <h1 class="page-title">Mis Equipos</h1>
-        <button class="create-btn" (click)="openCreateModal()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><path d="M12 5v14M5 12h14"/></svg>
-          Nuevo equipo
-        </button>
+        <div class="header-actions">
+          <button class="import-btn" (click)="openImportModal()" title="Importar equipo desde archivo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Importar
+          </button>
+          <button class="create-btn" (click)="openCreateModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15"><path d="M12 5v14M5 12h14"/></svg>
+            Nuevo equipo
+          </button>
+        </div>
       </div>
 
       <div class="empty-state" *ngIf="teamsService.teams().length === 0">
@@ -451,49 +512,135 @@ interface EditForm {
       <div class="teams-grid" *ngIf="teamsService.teams().length > 0">
         <div class="team-card" *ngFor="let team of teamsService.teams()">
           <div class="team-header">
-            <h3 class="team-name">{{ team.name }}</h3>
+            <div class="team-header-left">
+              <h3 class="team-name">{{ team.name }}</h3>
+              <div class="team-count-pills">
+                <span class="count-filled" *ngFor="let s of slots; let i = index"
+                  [class.active]="i < team.members.length"></span>
+              </div>
+            </div>
             <div class="team-meta">
-              <span class="team-count">{{ team.members.length }}/6</span>
-              <button class="icon-btn danger" (click)="confirmDeleteTeamId.set(team.id)">
+              <span class="team-count-label">{{ team.members.length }}/6</span>
+              <button class="icon-btn export" (click)="exportTeam(team)" title="Compartir / Exportar equipo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                  <polyline points="16 6 12 2 8 6"/>
+                  <line x1="12" y1="2" x2="12" y2="15"/>
+                </svg>
+              </button>
+              <button class="icon-btn danger" (click)="confirmDeleteTeamId.set(team.id)" title="Eliminar equipo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
               </button>
             </div>
           </div>
+
           <div class="team-slots">
             <div class="slot" *ngFor="let slot of slots">
               <ng-container *ngIf="getMember(team, slot) as member; else emptySlot">
                 <div class="slot-filled">
-                  <img [src]="member.pokemonImageUrl" [alt]="member.pokemonName" class="slot-img" />
+                  <button class="slot-remove-x" (click)="removeMember(team.id, member.pokemonId)" title="Quitar">✕</button>
+                  <div class="slot-img-wrap">
+                    <img [src]="member.pokemonImageUrl" [alt]="member.pokemonName" class="slot-img" />
+                  </div>
                   <span class="slot-name">{{ member.pokemonName }}</span>
-                  <div class="slot-build-info" *ngIf="member.nature || member.ability">
-                    <span class="build-pill" *ngIf="member.nature">{{ natureEs(member.nature) }}</span>
-                    <span class="build-pill ability" *ngIf="member.ability">{{ formatName(member.ability) }}</span>
+
+                  <div class="slot-chips" *ngIf="member.nature || member.ability">
+                    <span class="schip nature-chip" *ngIf="member.nature">{{ natureEs(member.nature) }}</span>
+                    <span class="schip ability-chip" *ngIf="member.ability">{{ formatName(member.ability) }}</span>
                   </div>
+
                   <div class="slot-item" *ngIf="member.heldItem">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="9" height="9"><circle cx="12" cy="12" r="9"/></svg>
-                    {{ member.heldItem }}
+                    <span class="item-dot"></span>{{ formatName(member.heldItem) }}
                   </div>
+
                   <div class="slot-moves" *ngIf="member.move1">
-                    <span *ngFor="let mv of memberMoves(member)" class="move-dot">{{ formatName(mv) }}</span>
+                    <span *ngFor="let mv of memberMoves(member)" class="move-pill">{{ formatName(mv) }}</span>
                   </div>
-                  <div class="slot-actions">
-                    <button class="slot-btn edit" (click)="openEdit(team.id, member)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                      Build
-                    </button>
-                    <button class="slot-btn remove" (click)="removeMember(team.id, member.pokemonId)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                  </div>
+
+                  <button class="slot-build-btn" (click)="openEdit(team.id, member)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Build
+                  </button>
                 </div>
               </ng-container>
               <ng-template #emptySlot>
                 <div class="slot-empty" (click)="openPicker(team, slot)">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                  <span>Añadir</span>
                 </div>
               </ng-template>
             </div>
+
+          <button class="team-analyze-btn"
+            (click)="analyzeTeam(team)"
+            [disabled]="analyzingTeam() && analysisTeamId() === team.id">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13">
+              <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+            </svg>
+            {{ (analyzingTeam() && analysisTeamId() === team.id) ? 'Analizando...' : 'Analizar equipo' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPORT MODAL -->
+    <div class="overlay" *ngIf="showImportModal()" (click)="closeImportModal()">
+      <div class="modal import-modal" (click)="$event.stopPropagation()">
+        <h3 class="modal-title">Importar equipo</h3>
+
+        <!-- File drop zone (no preview yet) -->
+        <ng-container *ngIf="!importPreview()">
+          <div class="drop-zone"
+               [class.drag-over]="dragOver()"
+               (dragover)="$event.preventDefault(); dragOver.set(true)"
+               (dragleave)="dragOver.set(false)"
+               (drop)="onFileDrop($event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="36" height="36">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <p class="drop-text">Arrastra aquí el archivo<br>o haz clic para buscarlo</p>
+            <label class="file-label">
+              Seleccionar archivo
+              <input type="file" accept=".json" class="file-input" (change)="onFileSelect($event)" />
+            </label>
           </div>
+          <p class="import-error" *ngIf="importError()">{{ importError() }}</p>
+        </ng-container>
+
+        <!-- Preview -->
+        <ng-container *ngIf="importPreview() as prev">
+          <div class="import-preview">
+            <div class="preview-name">
+              <span class="preview-label">Equipo</span>
+              <strong>{{ prev.name }}</strong>
+            </div>
+            <div class="preview-members">
+              <div class="preview-member" *ngFor="let m of prev.members">
+                <img [src]="m.pokemonImageUrl" [alt]="m.pokemonName" class="preview-sprite"
+                     (error)="onImgError($event)" />
+                <div class="preview-info">
+                  <span class="preview-pname">{{ formatName(m.pokemonName) }}</span>
+                  <span class="preview-meta" *ngIf="m.heldItem || m.nature">
+                    {{ m.nature ? natureEs(m.nature) : '' }}{{ m.heldItem ? ' · ' + formatName(m.heldItem) : '' }}
+                  </span>
+                  <span class="preview-moves" *ngIf="m.move1">
+                    {{ movesDisplay(m.move1,m.move2,m.move3,m.move4) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="import-error" *ngIf="importError()">{{ importError() }}</p>
+        </ng-container>
+
+        <div class="modal-footer">
+          <button class="btn-cancel" (click)="closeImportModal()">Cancelar</button>
+          <button *ngIf="importPreview()" class="btn-primary"
+                  (click)="confirmImport()" [disabled]="importing()">
+            {{ importing() ? 'Importando...' : 'Importar equipo' }}
+          </button>
         </div>
       </div>
     </div>
@@ -549,6 +696,137 @@ interface EditForm {
           </div>
         </div>
         <div class="picker-adding" *ngIf="addingMember()"><div class="mini-spin"></div><span>Añadiendo...</span></div>
+      </div>
+    </div>
+
+    <!-- BUILD PAYWALL MODAL -->
+    <div class="overlay" *ngIf="showBuildPaywall()" (click)="showBuildPaywall.set(false)">
+      <div class="edit-modal paywall-modal" (click)="$event.stopPropagation()">
+        <div class="paywall-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40">
+            <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+          </svg>
+        </div>
+        <h2 class="paywall-title">Función Premium</h2>
+        <p class="paywall-msg">
+          El <strong>Build de Pokémon</strong> (objeto, movimientos, EVs, IVs, habilidad y naturaleza)
+          es una función exclusiva de <strong>Premium</strong>.<br><br>
+          <strong>3 días gratis</strong> para probarlo sin compromiso.<br>
+          Luego desde <strong>$1/mes</strong> o <strong>$10/año</strong> con 1 mes gratis incluido.
+        </p>
+        <div class="paywall-actions">
+          <button class="pw-cancel" (click)="showBuildPaywall.set(false)">Cancelar</button>
+          <a routerLink="/subscription" class="pw-upgrade" (click)="showBuildPaywall.set(false)">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+            </svg>
+            Ver Premium
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANALYSIS MODAL -->
+    <div class="overlay" *ngIf="analysisTeamId() !== null" (click)="closeAnalysis()">
+      <div class="analysis-modal" (click)="$event.stopPropagation()">
+
+        <div class="an-header">
+          <div class="an-header-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+              <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+            </svg>
+            <div>
+              <div class="an-label">Análisis del equipo</div>
+              <div class="an-team-name">{{ getAnalysisTeamName() }}</div>
+            </div>
+          </div>
+          <button class="close-x an-close" (click)="closeAnalysis()">✕</button>
+        </div>
+
+        <div class="an-loading" *ngIf="analyzingTeam()">
+          <div class="mini-spin"></div><span>Analizando equipo...</span>
+        </div>
+
+        <div class="an-body" *ngIf="!analyzingTeam() && teamAnalysis() as ta">
+
+          <!-- Tipos del equipo -->
+          <div class="an-section">
+            <div class="an-stitle">Tipos del equipo</div>
+            <div class="an-members-row">
+              <div class="an-member" *ngFor="let mt of ta.memberTypes">
+                <span class="an-mname">{{ mt.name }}</span>
+                <div class="an-mtypes">
+                  <span class="type-pill small-tp" *ngFor="let t of mt.types" [style.background]="typeColor(t)">{{ typeNameEs(t) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Amenazas defensivas -->
+          <div class="an-section" *ngIf="ta.threats.length > 0">
+            <div class="an-stitle">Amenazas al equipo</div>
+            <div class="an-legend">
+              <span class="adot adot-quad"></span><span>×4 débil</span>
+              <span class="adot adot-weak"></span><span>×2 débil</span>
+              <span class="adot adot-res"></span><span>Resistente</span>
+              <span class="adot adot-imm"></span><span>Inmune</span>
+              <span class="adot adot-neu"></span><span>Neutro</span>
+            </div>
+            <div class="an-threats-grid">
+              <div class="an-threat-row" *ngFor="let d of ta.threats"
+                [class.t-crit]="d.weak >= 3" [class.t-notable]="d.weak === 2">
+                <span class="type-pill small-tp" [style.background]="typeColor(d.type)">{{ typeNameEs(d.type) }}</span>
+                <div class="an-dots">
+                  <span class="adot adot-quad" *ngFor="let i of arrayOf(d.quad)" title="×4 débil"></span>
+                  <span class="adot adot-weak" *ngFor="let i of arrayOf(d.weak - d.quad)" title="×2 débil"></span>
+                  <span class="adot adot-res"  *ngFor="let i of arrayOf(d.resist)" title="Resistente"></span>
+                  <span class="adot adot-imm"  *ngFor="let i of arrayOf(d.immune)" title="Inmune"></span>
+                  <span class="adot adot-neu"  *ngFor="let i of arrayOf(d.neutral)" title="Neutro"></span>
+                </div>
+                <span class="an-weak-badge" [class.badge-crit]="d.weak >= 3">{{ d.weak }}×</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Buenas resistencias -->
+          <div class="an-section" *ngIf="ta.goodResists.length > 0">
+            <div class="an-stitle">Buenas resistencias del equipo</div>
+            <div class="an-types-row">
+              <span class="type-pill" *ngFor="let d of ta.goodResists" [style.background]="typeColor(d.type)">{{ typeNameEs(d.type) }}</span>
+            </div>
+          </div>
+
+          <!-- Cobertura ofensiva -->
+          <div class="an-section">
+            <div class="an-stitle">Cobertura ofensiva</div>
+            <div class="an-cov-block">
+              <div class="an-cov-row" *ngIf="ta.stabCoverage.length > 0">
+                <span class="an-cov-lbl">STAB</span>
+                <div class="an-types-row">
+                  <span class="type-pill" *ngFor="let t of ta.stabCoverage" [style.background]="typeColor(t)">{{ typeNameEs(t) }}</span>
+                </div>
+              </div>
+              <div class="an-cov-row" *ngIf="ta.moveCoverage.length > 0">
+                <span class="an-cov-lbl">Movimientos</span>
+                <div class="an-types-row">
+                  <span class="type-pill" *ngFor="let t of ta.moveCoverage" [style.background]="typeColor(t)">{{ typeNameEs(t) }}</span>
+                </div>
+              </div>
+              <div class="an-empty" *ngIf="ta.stabCoverage.length === 0 && ta.moveCoverage.length === 0">
+                Añade Pokémon al equipo para ver la cobertura.
+              </div>
+            </div>
+          </div>
+
+          <!-- Consejos -->
+          <div class="an-section">
+            <div class="an-stitle">Consejos para mejorar el equipo</div>
+            <div class="an-tips">
+              <div class="an-tip" *ngFor="let tip of ta.tips">{{ tip }}</div>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
 
@@ -734,41 +1012,177 @@ interface EditForm {
     </div>
   `,
   styles: [`
-    .page { padding:2rem; max-width:1200px; margin:0 auto; }
-    .page-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem; }
+    /* ── Page layout ─────────────────────────────────────────────────────── */
+    .page { padding: 2rem; max-width: 1200px; margin: 0 auto; box-sizing: border-box; }
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: .75rem; }
+    @media (max-width: 480px) {
+      .page { padding: 1rem; }
+    }
     .page-title { font-size:1.8rem;font-weight:800;color:#1a1a2e;margin:0; }
-    .create-btn { display:flex;align-items:center;gap:.4rem;padding:.6rem 1.2rem;background:#e63946;color:white;border:none;border-radius:10px;font-weight:700;font-size:.88rem;cursor:pointer;transition:background .2s; }
+    .header-actions { display:flex;align-items:center;gap:.5rem; }
+    .create-btn { display:flex;align-items:center;gap:.4rem;padding:.6rem 1.2rem;background:#e63946;color:white;border:none;border-radius:12px;font-weight:700;font-size:.88rem;cursor:pointer;transition:background .2s;box-shadow:0 2px 8px rgba(230,57,70,.25); }
     .create-btn:hover { background:#c1121f; }
+    .import-btn { display:flex;align-items:center;gap:.4rem;padding:.58rem 1rem;background:white;color:#555;border:1.5px solid #e8e8e8;border-radius:12px;font-weight:700;font-size:.85rem;cursor:pointer;transition:all .2s; }
+    .import-btn:hover { border-color:#1976d2;color:#1976d2;background:#f0f6ff; }
     .empty-state { text-align:center;padding:5rem 1rem;color:#bbb;display:flex;flex-direction:column;align-items:center;gap:1rem;font-size:.95rem;line-height:1.6; }
-    .teams-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1.5rem; }
-    .team-card { background:white;border-radius:16px;padding:1.25rem;box-shadow:0 2px 10px rgba(0,0,0,.07); }
-    .team-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem; }
-    .team-name { font-size:1.05rem;font-weight:700;color:#1a1a2e;margin:0; }
+
+    /* ── Team grid ────────────────────────────────────────────────────────── */
+    .teams-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+      gap: 1.5rem;
+    }
+
+    /* ── Team card ────────────────────────────────────────────────────────── */
+    .team-card {
+      background: white; border-radius: 20px;
+      padding: 1.4rem 1.4rem 1.25rem;
+      box-shadow: 0 2px 16px rgba(0,0,0,.07);
+      border: 1px solid #f0f0f0;
+      transition: box-shadow .2s;
+      min-width: 0; /* prevent grid blowout */
+    }
+    .team-card:hover { box-shadow: 0 6px 24px rgba(0,0,0,.1); }
+
+    /* ── Team header ─────────────────────────────────────────────────────── */
+    .team-header { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.1rem; }
+    .team-header-left { display:flex;flex-direction:column;gap:.4rem; }
+    .team-name { font-size:1.1rem;font-weight:800;color:#1a1a2e;margin:0; }
+    .team-count-pills { display:flex;gap:.25rem; }
+    .count-filled { width:18px;height:5px;border-radius:999px;background:#e8e8e8;transition:background .2s; }
+    .count-filled.active { background:#e63946; }
     .team-meta { display:flex;align-items:center;gap:.5rem; }
-    .team-count { font-size:.78rem;color:#aaa;font-weight:600; }
-    .icon-btn { background:none;border:none;cursor:pointer;padding:.3rem;border-radius:6px;color:#ccc;transition:all .2s;display:flex; }
+    .team-count-label { font-size:.75rem;color:#aaa;font-weight:700;background:#f5f5f7;padding:.2rem .55rem;border-radius:999px; }
+    .icon-btn { background:none;border:none;cursor:pointer;padding:.35rem;border-radius:8px;color:#d0d0d0;transition:all .2s;display:flex; }
     .icon-btn.danger:hover { background:rgba(230,57,70,.1);color:#e63946; }
-    .team-slots { display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem; }
-    .slot-empty { background:#f8f8f8;border-radius:12px;height:100px;display:flex;align-items:center;justify-content:center;border:2px dashed #e0e0e0;color:#ccc;cursor:pointer;transition:all .2s; }
-    .slot-empty:hover { border-color:#e63946;color:#e63946;background:rgba(230,57,70,.04); }
-    .slot-filled { background:#f8f8f8;border-radius:12px;padding:.5rem;text-align:center;min-height:100px; }
-    .slot-img { width:56px;height:56px;object-fit:contain; }
-    .slot-name { display:block;font-size:.7rem;font-weight:600;text-transform:capitalize;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-    .slot-build-info { display:flex;flex-wrap:wrap;gap:.2rem;justify-content:center;margin-top:.25rem; }
-    .build-pill { font-size:.58rem;padding:.1rem .35rem;background:#e8eaf6;color:#3949ab;border-radius:999px;font-weight:600;white-space:nowrap; }
-    .build-pill.ability { background:#e8f5e9;color:#2e7d32; }
-    .slot-item { font-size:.58rem;color:#f57c00;font-weight:600;margin-top:.2rem;display:flex;align-items:center;justify-content:center;gap:.2rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-    .slot-moves { display:flex;flex-wrap:wrap;gap:.15rem;justify-content:center;margin-top:.2rem; }
-    .move-dot { font-size:.55rem;color:#888;background:#f0f0f0;padding:.05rem .3rem;border-radius:4px;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:capitalize; }
-    .slot-actions { display:flex;gap:.3rem;justify-content:center;margin-top:.35rem; }
-    .slot-btn { display:flex;align-items:center;gap:.2rem;padding:.2rem .45rem;border:none;border-radius:6px;font-size:.65rem;font-weight:600;cursor:pointer;transition:all .15s; }
-    .slot-btn.edit { background:#e3f2fd;color:#1565c0; } .slot-btn.edit:hover { background:#bbdefb; }
-    .slot-btn.remove { background:#fce4ec;color:#c62828; } .slot-btn.remove:hover { background:#ffcdd2; }
+    .icon-btn.export:hover { background:rgba(25,118,210,.1);color:#1976d2; }
+
+    /* ── Slots grid ──────────────────────────────────────────────────────── */
+    .team-slots {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .65rem;
+    }
+    /* Collapse to 2 columns when the card is narrow (container queries fallback via media) */
+    @media (max-width: 520px) {
+      .team-slots { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* ── Empty slot ──────────────────────────────────────────────────────── */
+    .slot-empty {
+      border-radius: 14px; min-height: 160px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .35rem;
+      border: 2px dashed #e4e4e4; color: #ccc;
+      cursor: pointer; transition: all .18s;
+      font-size: .7rem; font-weight: 600; letter-spacing: .2px;
+    }
+    .slot-empty:hover { border-color: #e63946; color: #e63946; background: rgba(230,57,70,.03); }
+
+    /* ── Filled slot ─────────────────────────────────────────────────────── */
+    .slot-filled {
+      border-radius: 14px; padding: .75rem .6rem .65rem;
+      background: #fafafa; border: 1px solid #f0f0f0;
+      display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      position: relative; min-width: 0; overflow: hidden;
+    }
+    .slot-remove-x {
+      position:absolute;top:.4rem;right:.4rem;
+      background:none;border:none;cursor:pointer;
+      font-size:.65rem;color:#d0d0d0;line-height:1;
+      padding:.2rem; border-radius:50%;
+      transition:all .15s;
+    }
+    .slot-remove-x:hover { color:#e63946;background:rgba(230,57,70,.1); }
+
+    .slot-img-wrap { width:clamp(56px,100%,80px);aspect-ratio:1;display:flex;align-items:center;justify-content:center; }
+    .slot-img { width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.12)); }
+
+    .slot-name {
+      font-size: .72rem; font-weight: 700;
+      text-transform: capitalize; color: #1a1a2e;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      width: 100%; text-align: center;
+    }
+
+    /* ── Build chips (nature + ability) ─────────────────────────────────── */
+    .slot-chips { display: flex; flex-wrap: wrap; gap: .2rem; justify-content: center; width: 100%; }
+    .schip {
+      font-size: .56rem; font-weight: 700; padding: .15rem .38rem;
+      border-radius: 999px; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+    }
+    .nature-chip  { background: #eef2ff; color: #4338ca; }
+    .ability-chip { background: #f0fdf4; color: #166534; }
+
+    /* ── Item ────────────────────────────────────────────────────────────── */
+    .slot-item {
+      display: flex; align-items: center; gap: .3rem;
+      font-size: .6rem; font-weight: 600; color: #b45309;
+      background: #fffbeb; border: 1px solid #fde68a;
+      padding: .15rem .45rem; border-radius: 999px;
+      width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      justify-content: center;
+    }
+    .item-dot { width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; flex-shrink: 0; }
+
+    /* ── Moves ───────────────────────────────────────────────────────────── */
+    .slot-moves { display: grid; grid-template-columns: 1fr 1fr; gap: .18rem; width: 100%; }
+    .move-pill {
+      font-size: .55rem; color: #555; font-weight: 600;
+      background: #f0f0f0; border-radius: 4px;
+      padding: .15rem .25rem; text-transform: capitalize;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      text-align: center; min-width: 0;
+    }
+
+    /* ── Build button ────────────────────────────────────────────────────── */
+    .slot-build-btn {
+      display: flex; align-items: center; justify-content: center; gap: .3rem;
+      padding: .35rem .5rem; margin-top: .15rem;
+      background: #1a1a2e; color: white;
+      border: none; border-radius: 8px;
+      font-size: .68rem; font-weight: 700; cursor: pointer;
+      transition: all .18s; width: 100%;
+    }
+    .slot-build-btn:hover { background: #2e2e50; }
+
+    /* PAYWALL */
+    .paywall-modal { max-width:400px!important;text-align:center;padding:2.5rem 2rem!important;background:white;border-radius:20px; }
+    .paywall-icon { color:#fbbf24;margin-bottom:1rem; }
+    .paywall-title { font-size:1.2rem;font-weight:800;color:#1a1a2e;margin:0 0 .75rem; }
+    .paywall-msg { font-size:.88rem;color:#555;line-height:1.65;margin:0 0 1.75rem; }
+    .paywall-actions { display:flex;gap:.75rem;justify-content:center; }
+    .pw-cancel { padding:.55rem 1.1rem;background:#f0f0f0;border:none;border-radius:10px;font-size:.88rem;font-weight:700;cursor:pointer;color:#555;transition:background .2s; }
+    .pw-cancel:hover { background:#e0e0e0; }
+    .pw-upgrade { display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1.4rem;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#1a1a2e;border:none;border-radius:10px;font-size:.88rem;font-weight:800;cursor:pointer;text-decoration:none;transition:all .2s; }
+    .pw-upgrade:hover { transform:translateY(-1px);box-shadow:0 4px 14px rgba(251,191,36,.4); }
 
     /* OVERLAY / MODALS */
     .overlay { position:fixed;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;z-index:300;padding:1rem; }
     .modal { background:white;border-radius:20px;padding:2rem;width:90%;max-width:420px;box-shadow:0 24px 64px rgba(0,0,0,.25); }
+    .import-modal { max-width:520px; }
     .modal-title { font-size:1.1rem;font-weight:800;color:#1a1a2e;margin:0 0 1.25rem; }
+
+    /* Import drop zone */
+    .drop-zone { border:2px dashed #e0e0e8;border-radius:14px;padding:2rem 1.5rem;display:flex;flex-direction:column;align-items:center;gap:.75rem;cursor:pointer;transition:border-color .2s,background .2s;color:#bbb;text-align:center; }
+    .drop-zone.drag-over { border-color:#1976d2;background:rgba(25,118,210,.04); }
+    .drop-text { font-size:.88rem;color:#888;line-height:1.5;margin:0; }
+    .file-label { display:inline-flex;align-items:center;gap:.4rem;padding:.4rem 1rem;background:#f0f0f5;border-radius:8px;font-size:.82rem;font-weight:600;color:#555;cursor:pointer;transition:background .18s; }
+    .file-label:hover { background:#e4e4ef; }
+    .file-input { display:none; }
+    .import-error { font-size:.82rem;color:#e63946;margin:.5rem 0 0;text-align:center; }
+
+    /* Import preview */
+    .import-preview { background:#f9f9fb;border-radius:12px;padding:1rem 1.1rem; }
+    .preview-name { display:flex;align-items:center;gap:.5rem;margin-bottom:.85rem;font-size:.9rem; }
+    .preview-label { font-size:.72rem;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.4px; }
+    .preview-members { display:flex;flex-direction:column;gap:.55rem; }
+    .preview-member { display:flex;align-items:center;gap:.75rem; }
+    .preview-sprite { width:44px;height:44px;object-fit:contain;flex-shrink:0; }
+    .preview-info { display:flex;flex-direction:column;gap:.08rem;min-width:0; }
+    .preview-pname { font-size:.85rem;font-weight:700;color:#1a1a2e;text-transform:capitalize; }
+    .preview-meta { font-size:.72rem;color:#888; }
+    .preview-moves { font-size:.68rem;color:#aaa; }
     .modal-input { width:100%;padding:.65rem .9rem;border:2px solid #eee;border-radius:10px;font-size:.92rem;outline:none;transition:border .2s;box-sizing:border-box; }
     .modal-input:focus { border-color:#e63946; }
     .modal-footer { display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.5rem; }
@@ -896,11 +1310,110 @@ interface EditForm {
     .iv-cell { display:flex;flex-direction:column;gap:.3rem;align-items:center; }
     .iv-input { width:52px;text-align:center; }
     .edit-footer { display:flex;gap:.75rem;justify-content:flex-end;padding:1rem 1.5rem;border-top:1px solid #f0f0f0;flex-shrink:0;background:white; }
+
+    /* ── Analyze button ──────────────────────────────────────────────────────── */
+    .team-analyze-btn {
+      display: flex; align-items: center; justify-content: center; gap: .4rem;
+      width: 100%; margin-top: .85rem; padding: .6rem;
+      background: linear-gradient(135deg, #1976d2, #1565c0);
+      color: white; border: none; border-radius: 12px;
+      font-size: .8rem; font-weight: 700; cursor: pointer;
+      transition: all .2s;
+      box-shadow: 0 3px 10px rgba(25,118,210,.28);
+      letter-spacing: .1px;
+    }
+    .team-analyze-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 5px 16px rgba(25,118,210,.38);
+      background: linear-gradient(135deg, #1e88e5, #1565c0);
+    }
+    .team-analyze-btn:disabled { opacity:.6; cursor:not-allowed; }
+
+    /* ── Analysis modal ──────────────────────────────────────────────────────── */
+    .analysis-modal {
+      background:white; border-radius:20px; width:100%; max-width:700px;
+      max-height:90vh; display:flex; flex-direction:column;
+      box-shadow:0 24px 80px rgba(0,0,0,.3); overflow:hidden;
+    }
+    .an-header {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:1.25rem 1.5rem; background:#1a1a2e; flex-shrink:0;
+    }
+    .an-header-left { display:flex; align-items:center; gap:.75rem; color:white; }
+    .an-label { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:rgba(255,255,255,.45); }
+    .an-team-name { font-size:1.05rem; font-weight:800; color:white; }
+    .an-close { color:rgba(255,255,255,.5)!important; }
+    .an-close:hover { color:white!important; }
+    .an-loading { display:flex;align-items:center;justify-content:center;gap:.6rem;padding:3rem;color:#888;font-size:.9rem; }
+    .an-body { overflow-y:auto; flex:1; padding:1.25rem 1.5rem; display:flex; flex-direction:column; gap:1.5rem; }
+    .an-section { display:flex; flex-direction:column; gap:.6rem; }
+    .an-stitle {
+      font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+      color:#aaa; border-bottom:1px solid #f0f0f0; padding-bottom:.4rem;
+    }
+
+    /* Member types */
+    .an-members-row { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .an-member { display:flex;flex-direction:column;gap:.25rem;background:#f8f9fb;border:1px solid #f0f0f0;border-radius:10px;padding:.5rem .65rem; }
+    .an-mname { font-size:.68rem; font-weight:700; text-transform:capitalize; color:#555; }
+    .an-mtypes { display:flex; gap:.2rem; flex-wrap:wrap; }
+    .small-tp { font-size:.58rem!important; padding:.1rem .32rem!important; }
+
+    /* Legend */
+    .an-legend { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; font-size:.68rem; color:#888; }
+    .an-legend .adot { flex-shrink:0; }
+
+    /* Threat grid */
+    .an-threats-grid { display:flex; flex-direction:column; gap:.35rem; }
+    .an-threat-row {
+      display:flex; align-items:center; gap:.65rem;
+      padding:.35rem .65rem; border-radius:10px;
+      background:#fafafa; border:1px solid #f0f0f0;
+    }
+    .an-threat-row.t-crit   { background:rgba(230,57,70,.06); border-color:rgba(230,57,70,.22); }
+    .an-threat-row.t-notable { background:rgba(255,152,0,.05); border-color:rgba(255,152,0,.2); }
+    .an-dots { display:flex; gap:.28rem; flex:1; align-items:center; }
+    .adot { width:10px; height:10px; border-radius:50%; flex-shrink:0; display:inline-block; }
+    .adot-quad { background:#7f0000; }
+    .adot-weak { background:#e53935; }
+    .adot-res  { background:#43a047; }
+    .adot-imm  { background:#1976d2; }
+    .adot-neu  { background:#e0e0e0; }
+    .an-weak-badge { font-size:.7rem; font-weight:800; color:#e53935; min-width:22px; text-align:right; }
+    .an-weak-badge.badge-crit { color:#b71c1c; }
+
+    /* Types row */
+    .an-types-row { display:flex; flex-wrap:wrap; gap:.3rem; }
+
+    /* Coverage */
+    .an-cov-block { display:flex; flex-direction:column; gap:.55rem; }
+    .an-cov-row { display:flex; align-items:flex-start; gap:.6rem; }
+    .an-cov-lbl {
+      font-size:.62rem; font-weight:700; background:#f0f0f0; color:#666;
+      padding:.2rem .55rem; border-radius:999px; white-space:nowrap; flex-shrink:0; margin-top:.1rem;
+    }
+    .an-empty { font-size:.82rem; color:#bbb; }
+
+    /* Tips */
+    .an-tips { display:flex; flex-direction:column; gap:.45rem; }
+    .an-tip {
+      font-size:.82rem; color:#444; line-height:1.55;
+      background:#f8f9fb; border:1px solid #eee;
+      border-radius:10px; padding:.6rem .85rem;
+    }
   `]
 })
 export class TeamsComponent implements OnInit {
   teamsService   = inject(TeamsService);
   pokemonService = inject(PokemonService);
+  auth           = inject(AuthService);
+
+  showBuildPaywall = signal(false);
+
+  // ── Analysis ─────────────────────────────────────────────────────────────────
+  analysisTeamId = signal<number|null>(null);
+  teamAnalysis   = signal<TeamAnalysis|null>(null);
+  analyzingTeam  = signal(false);
 
   readonly Math      = Math;
   readonly natures   = NATURES;
@@ -911,6 +1424,13 @@ export class TeamsComponent implements OnInit {
   showCreateModal      = signal(false);
   newTeamName          = '';
   confirmDeleteTeamId  = signal<number|null>(null);
+
+  // ── Import ────────────────────────────────────────────────────────────────────
+  showImportModal = signal(false);
+  importPreview   = signal<{ name: string; members: any[] } | null>(null);
+  importError     = signal('');
+  importing       = signal(false);
+  dragOver        = signal(false);
   showPicker           = signal(false);
   activeTeam           = signal<PokemonTeam|null>(null);
   activeSlot           = signal(0);
@@ -1053,6 +1573,7 @@ export class TeamsComponent implements OnInit {
   // ── Edit build ────────────────────────────────────────────────────────────────
 
   openEdit(teamId: number, member: TeamMember) {
+    if (!this.auth.isPremium()) { this.showBuildPaywall.set(true); return; }
     this.editLoading.set(true);
     this.moveQueries.set(['','','','']); this.showItemDropdown.set(false); this.activeMoveSlot.set(-1);
     this.pokemonStats.set(null);
@@ -1138,6 +1659,96 @@ export class TeamsComponent implements OnInit {
     }).subscribe({ next:()=>{ this.saving.set(false); this.closeEdit(); }, error:()=>this.saving.set(false) });
   }
 
+  // ── Team Analysis ─────────────────────────────────────────────────────────────
+
+  analyzeTeam(team: PokemonTeam) {
+    if (!this.auth.isPremium()) { this.showBuildPaywall.set(true); return; }
+    if (team.members.length === 0) return;
+    this.analysisTeamId.set(team.id);
+    this.teamAnalysis.set(null);
+    this.analyzingTeam.set(true);
+
+    forkJoin(team.members.map(m =>
+      this.pokemonService.getDetail(m.pokemonId).pipe(catchError(() => of(null)))
+    )).subscribe((details: any[]) => {
+      const memberTypes: MemberTypeInfo[] = details.map((d, i) => ({
+        name: team.members[i].pokemonName,
+        types: d ? (d.types as any[]).map((t: any) => t.type.name as string) : [],
+      }));
+      const n = memberTypes.filter(m => m.types.length > 0).length || 1;
+
+      const allStats: DefStat[] = (ALL_TYPES as readonly string[]).map(atk => {
+        let weak = 0, quad = 0, resist = 0, immune = 0, neutral = 0;
+        for (const mt of memberTypes) {
+          if (!mt.types.length) continue;
+          const e = getDefEff(atk, mt.types);
+          if      (e === 0) immune++;
+          else if (e >= 4)  { weak++; quad++; }
+          else if (e >= 2)  weak++;
+          else if (e <= .5) resist++;
+          else              neutral++;
+        }
+        return { type: atk, weak, quad, resist, immune, neutral };
+      });
+
+      const threats    = allStats.filter(d => d.weak >= 1).sort((a,b) => b.weak - a.weak || b.quad - a.quad);
+      const goodResists = allStats.filter(d => d.resist + d.immune >= 2).sort((a,b) => (b.resist+b.immune)-(a.resist+a.immune));
+
+      const stabSet = new Set<string>(memberTypes.flatMap(m => m.types));
+      const moveCovSet = new Set<string>();
+      for (const m of team.members) {
+        for (const mv of [m.move1,m.move2,m.move3,m.move4].filter(Boolean) as string[]) {
+          const md = MOVE_DATA.find(e => e.name === mv);
+          if (md && md.power > 0) moveCovSet.add(md.type);
+        }
+      }
+
+      const allCov = new Set([...stabSet, ...moveCovSet]);
+      const teamCanHit = (dt: string) =>
+        (ALL_TYPES as readonly string[]).some(at => allCov.has(at) && (TYPE_EFF[at]?.[dt] ?? 1) >= 2);
+      const uncovered = (ALL_TYPES as readonly string[]).filter(dt => !teamCanHit(dt));
+
+      const tips: string[] = [];
+      for (const d of threats.filter(t => t.weak >= 3)) {
+        tips.push(`⚠️ Debilidad crítica al tipo ${TYPE_NAMES_ES[d.type]}: ${d.weak}/${n} miembros son débiles${d.quad > 0 ? `, uno con ×4` : ''}. Incluye un Pokémon que resista este tipo.`);
+      }
+      for (const d of threats.filter(t => t.weak === 2).slice(0, 3)) {
+        tips.push(`💡 Tipo ${TYPE_NAMES_ES[d.type]}: 2 miembros son débiles${d.quad > 0 ? ' (uno ×4)' : ''}. El rival puede explotarlo.`);
+      }
+      if (uncovered.length > 0 && uncovered.length <= 7) {
+        tips.push(`🎯 Sin cobertura ofensiva efectiva contra: ${uncovered.map(t => TYPE_NAMES_ES[t]).join(', ')}.`);
+      }
+
+      if (team.members.length >= 3) {
+        const hasMove = (flag: string) => team.members.some(m =>
+          [m.move1,m.move2,m.move3,m.move4].filter(Boolean)
+            .some(mv => MOVE_DATA.find(e => e.name === mv && e.flags?.includes(flag))));
+        if (!hasMove('hazard'))        tips.push('🪨 Sin trampas de entrada (Stealth Rock, Spikes). Esenciales para acumular daño pasivo.');
+        if (!hasMove('hazard-remove')) tips.push('🧹 Sin eliminación de trampas (Rapid Spin / Defog). Las trampas enemigas debilitan a todo el equipo.');
+        if (!hasMove('priority'))      tips.push('⚡ Sin movimientos de prioridad. Útiles para rematar rivales con poca vida.');
+        if (!hasMove('setup'))         tips.push('📈 Sin movimientos de preparación (Danza Espada, Danza Dragón...). Un sweeper con setup puede ser decisivo.');
+        if (!hasMove('pivot'))         tips.push('🔄 Sin pivotes (U-Turn, Volt Switch). Permiten hacer cambios seguros sin ceder el turno.');
+        if (!hasMove('recovery'))      tips.push('💊 Sin recuperación propia. En combates largos, un Pokémon que se cure puede marcar la diferencia.');
+      }
+
+      if (tips.length === 0) tips.push('✅ ¡El equipo está bien equilibrado! No se detectaron problemas graves.');
+
+      this.teamAnalysis.set({ memberTypes, threats, goodResists,
+        stabCoverage: [...stabSet], moveCoverage: [...moveCovSet], tips });
+      this.analyzingTeam.set(false);
+    });
+  }
+
+  closeAnalysis() { this.analysisTeamId.set(null); this.teamAnalysis.set(null); }
+
+  getAnalysisTeamName(): string {
+    const id = this.analysisTeamId();
+    return id === null ? '' : (this.teamsService.teams().find(t => t.id === id)?.name ?? '');
+  }
+
+  typeNameEs(t: string): string { return TYPE_NAMES_ES[t] ?? t; }
+  arrayOf(n: number): number[] { return Array.from({ length: Math.max(0, n) }, (_, i) => i); }
+
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
   statLabel(key: string) { return STAT_LABELS[key]??key; }
@@ -1147,6 +1758,9 @@ export class TeamsComponent implements OnInit {
     return m[stat]??stat;
   }
   formatName(name: string) { return name.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()); }
+  movesDisplay(m1:string|null|undefined,m2:string|null|undefined,m3:string|null|undefined,m4:string|null|undefined){
+    return [m1,m2,m3,m4].filter(x=>!!x).map(x=>this.formatName(x!)).join(' · ');
+  }
   catLabel(cat: string) { return CAT_LABELS[cat]??cat; }
   catColor(cat: string) { return CAT_COLORS[cat]??'#888'; }
   moveCatLabel(cat: string) { return { physical:'Fís', special:'Esp', status:'Est' }[cat]??cat; }
@@ -1159,5 +1773,118 @@ export class TeamsComponent implements OnInit {
       dark:'#705848',steel:'#B8B8D0',fairy:'#EE99AC',
     };
     return c[type]??'#888';
+  }
+
+  onImgError(e: Event) { (e.target as HTMLImageElement).style.display = 'none'; }
+
+  // ── Export ────────────────────────────────────────────────────────────────────
+  exportTeam(team: PokemonTeam) {
+    const payload = {
+      version: '1',
+      name: team.name,
+      exportedAt: new Date().toISOString(),
+      members: team.members.map(m => ({
+        slot: m.slot,
+        pokemonId: m.pokemonId,
+        pokemonName: m.pokemonName,
+        pokemonImageUrl: m.pokemonImageUrl,
+        heldItem: m.heldItem ?? null,
+        ability:  m.ability  ?? null,
+        nature:   m.nature   ?? null,
+        move1: m.move1 ?? null, move2: m.move2 ?? null,
+        move3: m.move3 ?? null, move4: m.move4 ?? null,
+        evHp: m.evHp??0, evAtk: m.evAtk??0, evDef: m.evDef??0,
+        evSpAtk: m.evSpAtk??0, evSpDef: m.evSpDef??0, evSpeed: m.evSpeed??0,
+        ivHp: m.ivHp??31, ivAtk: m.ivAtk??31, ivDef: m.ivDef??31,
+        ivSpAtk: m.ivSpAtk??31, ivSpDef: m.ivSpDef??31, ivSpeed: m.ivSpeed??31,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `equipo-${team.name.replace(/\s+/g, '-').toLowerCase()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Import ────────────────────────────────────────────────────────────────────
+  openImportModal() {
+    this.importPreview.set(null);
+    this.importError.set('');
+    this.importing.set(false);
+    this.showImportModal.set(true);
+  }
+
+  closeImportModal() {
+    this.showImportModal.set(false);
+    this.importPreview.set(null);
+    this.importError.set('');
+  }
+
+  onFileSelect(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (file) this.parseImportFile(file);
+  }
+
+  onFileDrop(event: DragEvent) {
+    event.preventDefault();
+    this.dragOver.set(false);
+    const file = event.dataTransfer?.files?.[0];
+    if (file) this.parseImportFile(file);
+  }
+
+  private parseImportFile(file: File) {
+    this.importError.set('');
+    if (!file.name.endsWith('.json')) {
+      this.importError.set('El archivo debe ser un .json exportado desde PokeNexo.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target!.result as string);
+        if (!data.name || !Array.isArray(data.members) || data.members.length === 0) {
+          this.importError.set('Archivo inválido: no contiene un equipo válido.');
+          return;
+        }
+        if (data.members.length > 6) {
+          this.importError.set('El equipo tiene más de 6 Pokémon.');
+          return;
+        }
+        const members = data.members.map((m: any) => ({
+          slot:           m.slot           ?? 1,
+          pokemonId:      m.pokemonId      ?? 0,
+          pokemonName:    m.pokemonName    ?? '',
+          pokemonImageUrl:m.pokemonImageUrl?? '',
+          heldItem: m.heldItem ?? null, ability: m.ability ?? null, nature: m.nature ?? null,
+          move1: m.move1??null, move2: m.move2??null, move3: m.move3??null, move4: m.move4??null,
+          evHp: m.evHp??0, evAtk: m.evAtk??0, evDef: m.evDef??0,
+          evSpAtk: m.evSpAtk??0, evSpDef: m.evSpDef??0, evSpeed: m.evSpeed??0,
+          ivHp: m.ivHp??31, ivAtk: m.ivAtk??31, ivDef: m.ivDef??31,
+          ivSpAtk: m.ivSpAtk??31, ivSpDef: m.ivSpDef??31, ivSpeed: m.ivSpeed??31,
+        }));
+        this.importPreview.set({ name: data.name, members });
+      } catch {
+        this.importError.set('No se pudo leer el archivo. ¿Está corrupto?');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  confirmImport() {
+    const prev = this.importPreview();
+    if (!prev) return;
+    this.importing.set(true);
+    this.teamsService.importTeam({ name: prev.name, members: prev.members }).subscribe({
+      next: () => {
+        this.importing.set(false);
+        this.closeImportModal();
+      },
+      error: () => {
+        this.importing.set(false);
+        this.importError.set('Error al importar el equipo. Intenta de nuevo.');
+      },
+    });
   }
 }

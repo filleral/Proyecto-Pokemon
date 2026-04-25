@@ -63,6 +63,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
 app.UseCors();
+app.UseStaticFiles();
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 

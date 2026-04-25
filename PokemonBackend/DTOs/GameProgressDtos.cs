@@ -4,6 +4,10 @@ public record CreateProgressRequest(string GameVersion, string TrainerName, Date
 
 public record UpsertCaughtRequest(int PokemonId, string PokemonName, bool Seen, bool CaughtNormal, bool CaughtShiny);
 
+public record CatchAllEntry(int PokemonId, string PokemonName);
+
+public record BulkUpsertEntry(int PokemonId, string PokemonName, bool Seen, bool CaughtNormal, bool CaughtShiny);
+
 public record CaughtPokemonDto(int PokemonId, string PokemonName, bool Seen, bool CaughtNormal, bool CaughtShiny);
 
 public record GameProgressSummaryDto(

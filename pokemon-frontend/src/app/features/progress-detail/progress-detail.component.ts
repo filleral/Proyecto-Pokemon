@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { switchMap, forkJoin } from 'rxjs';
 import { ProgressService, PokedexEntry } from '../../core/services/progress.service';
 import { PokemonService } from '../../core/services/pokemon.service';
-import { GameProgressDetail, CaughtPokemonDto } from '../../core/models/progress.model';
+import { GameProgressDetail, CaughtPokemonDto, GAME_POKEDEX } from '../../core/models/progress.model';
 import { TYPE_COLORS, TYPE_NAMES_ES } from '../../core/models/pokemon.model';
 
 const GAME_META: Record<string, { label: string; bg: string; logo: string }> = {
@@ -146,6 +146,10 @@ interface PokemonDetailData {
           </div>
         </div>
         <div class="actions-right">
+          <button class="act-btn act-catchall" (click)="confirmCatchAll.set(true)" [disabled]="catchingAll()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/></svg>
+            {{ catchingAll() ? 'Capturando...' : 'Capturar todos' }}
+          </button>
           <button class="act-btn act-reset" (click)="confirmReset.set(true)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
             Reiniciar
@@ -168,6 +172,38 @@ interface PokemonDetailData {
         <button class="filter-btn" [class.active]="filter() === 'caught'"  (click)="filter.set('caught')">✓ Capturados</button>
         <button class="filter-btn" [class.active]="filter() === 'shiny'"   (click)="filter.set('shiny')">✨ Shiny</button>
         <button class="filter-btn" [class.active]="filter() === 'missing'" (click)="filter.set('missing')">Faltan</button>
+
+        <!-- Sort toggle: only shown for games with a regional dex -->
+        <div class="sort-toggle" *ngIf="hasRegionalOrder()">
+          <button class="sort-btn" [class.active]="sortOrder() === 'game'"
+                  (click)="sortOrder.set('game')" title="Ordenar como en el juego">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+            </svg>
+            Del juego
+          </button>
+          <button class="sort-btn" [class.active]="sortOrder() === 'national'"
+                  (click)="sortOrder.set('national')" title="Ordenar por número nacional">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+              <line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/>
+              <line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            Nacional
+          </button>
+        </div>
+
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input class="search-input" type="text" placeholder="Nombre o #número…"
+                 [value]="searchQuery()"
+                 (input)="searchQuery.set($any($event.target).value)" />
+          <button class="search-clear" *ngIf="searchQuery()" (click)="searchQuery.set('')">✕</button>
+        </div>
       </div>
 
       <!-- BOXES -->
@@ -256,6 +292,28 @@ interface PokemonDetailData {
           </button>
 
           <button class="btn-close" (click)="closeModal()">Cerrar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONFIRM CATCH ALL MODAL -->
+    <div class="modal-overlay" *ngIf="confirmCatchAll()" (click)="confirmCatchAll.set(false)">
+      <div class="modal action-modal" (click)="$event.stopPropagation()">
+        <div class="action-modal-icon catchall-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="30" height="30">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+            <line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/>
+          </svg>
+        </div>
+        <h2 class="action-modal-title">Capturar todos</h2>
+        <p class="action-modal-msg">
+          Se marcarán los <strong>{{ allEntries().length }}</strong> Pokémon de la Pokédex como
+          <strong>vistos y capturados</strong> (normal). Los shiny ya registrados no se modificarán.
+        </p>
+        <div class="action-modal-btns">
+          <button class="btn-cancel" (click)="confirmCatchAll.set(false)">Cancelar</button>
+          <button class="btn-catchall" (click)="doCatchAll()">Sí, capturar todos</button>
         </div>
       </div>
     </div>
@@ -398,6 +456,21 @@ interface PokemonDetailData {
     .filter-btn { padding:.3rem .75rem;border:1.5px solid #e8e8e8;border-radius:999px;background:none;font-size:.78rem;font-weight:600;color:#888;cursor:pointer;transition:all .18s; }
     .filter-btn.active,.filter-btn:hover { border-color:#e63946;color:#e63946;background:rgba(230,57,70,.05); }
 
+    .sort-toggle { display:flex;align-items:center;gap:0;border:1.5px solid #e8e8e8;border-radius:10px;overflow:hidden;margin-left:.25rem; }
+    .sort-btn { display:flex;align-items:center;gap:.3rem;padding:.28rem .65rem;border:none;background:none;font-size:.72rem;font-weight:700;color:#aaa;cursor:pointer;transition:all .18s;white-space:nowrap; }
+    .sort-btn + .sort-btn { border-left:1.5px solid #e8e8e8; }
+    .sort-btn:hover { background:rgba(230,57,70,.05);color:#e63946; }
+    .sort-btn.active { background:#e63946;color:white; }
+    .sort-btn.active + .sort-btn { border-left-color:#e63946; }
+
+    .search-wrap { margin-left:auto;position:relative;display:flex;align-items:center; }
+    .search-wrap .search-icon { position:absolute;left:.6rem;color:#aaa;pointer-events:none; }
+    .search-wrap .search-input { padding:.3rem .3rem .3rem 1.85rem;border:1.5px solid #e8e8e8;border-radius:999px;background:none;font-size:.78rem;font-weight:500;color:#333;width:180px;outline:none;transition:border-color .18s,width .25s; }
+    .search-wrap .search-input:focus { border-color:#e63946;width:220px; }
+    .search-wrap .search-input::placeholder { color:#ccc; }
+    .search-clear { position:absolute;right:.5rem;background:none;border:none;cursor:pointer;color:#bbb;font-size:.75rem;padding:0;line-height:1;transition:color .15s; }
+    .search-clear:hover { color:#e63946; }
+
     /* BOXES */
     .boxes-container { padding:1.25rem 1.5rem;display:flex;flex-direction:column;gap:1.25rem; }
     .box-section { background:white;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06); }
@@ -479,6 +552,9 @@ interface PokemonDetailData {
     .actions-right { display:flex;align-items:center;gap:.5rem;flex-wrap:wrap; }
     .finished-badge { display:flex;align-items:center;gap:.4rem;font-size:.78rem;font-weight:700;color:#2e7d32;background:#e8f5e9;padding:.3rem .75rem;border-radius:999px; }
     .act-btn { display:flex;align-items:center;gap:.4rem;padding:.42rem .9rem;border:none;border-radius:10px;font-size:.78rem;font-weight:700;cursor:pointer;transition:all .18s;white-space:nowrap; }
+    .act-catchall { background:#e8f0fe;color:#1a56db; }
+    .act-catchall:hover:not(:disabled) { background:#c7d7fc; }
+    .act-catchall:disabled { opacity:.6;cursor:not-allowed; }
     .act-reset  { background:#fff3f3;color:#c62828; }
     .act-reset:hover  { background:#ffcdd2; }
     .act-finish { background:#e8f5e9;color:#2e7d32; }
@@ -489,6 +565,9 @@ interface PokemonDetailData {
     /* ACTION MODALS */
     .action-modal { max-width:380px;text-align:center;padding:2.25rem 2rem; }
     .action-modal-icon { width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem; }
+    .catchall-icon { background:rgba(26,86,219,.1);color:#1a56db; }
+    .btn-catchall { padding:.55rem 1.4rem;background:#1a56db;color:white;border:none;border-radius:10px;font-size:.88rem;font-weight:700;cursor:pointer;transition:background .2s; }
+    .btn-catchall:hover { background:#1240a8; }
     .reset-icon  { background:rgba(198,40,40,.1);color:#c62828; }
     .finish-icon { background:rgba(46,125,50,.1);color:#2e7d32; }
     .action-modal-title { font-size:1.15rem;font-weight:800;color:#1a1a2e;margin:0 0 .6rem; }
@@ -549,10 +628,14 @@ export class ProgressDetailComponent implements OnInit {
   allEntries   = signal<GridEntry[]>([]);
   loadingDex   = signal(true);
   filter       = signal<'all'|'seen'|'caught'|'shiny'|'missing'>('all');
+  sortOrder    = signal<'game' | 'national'>('game');
+  searchQuery  = signal('');
   modal        = signal<ModalData | null>(null);
   detailModal  = signal<PokemonDetailData | null>(null);
-  confirmReset = signal(false);
-  confirmFinish = signal(false);
+  confirmReset    = signal(false);
+  confirmFinish   = signal(false);
+  confirmCatchAll = signal(false);
+  catchingAll     = signal(false);
 
   private progressId!: number;
 
@@ -561,25 +644,60 @@ export class ProgressDetailComponent implements OnInit {
   totalCaught = computed(() => this.allEntries().filter(e => e.caughtNormal).length);
   totalShiny  = computed(() => this.allEntries().filter(e => e.caughtShiny).length);
 
+  // Whether the current game uses a regional dex (toggle makes sense only for these)
+  hasRegionalOrder = computed(() =>
+    Array.isArray(GAME_POKEDEX[this.progress()?.gameVersion ?? ''])
+  );
+
+  // allEntries is always stored in game/regional order (entryNumber).
+  // sortedEntries re-sorts by national pokemonId when the user picks "national".
+  private sortedEntries = computed(() => {
+    if (this.sortOrder() === 'national' && this.hasRegionalOrder()) {
+      return [...this.allEntries()].sort((a, b) => a.pokemonId - b.pokemonId);
+    }
+    return this.allEntries();
+  });
+
   private filteredEntries = computed(() => {
     const f = this.filter();
-    return this.allEntries().filter(e => {
-      if (f === 'seen')    return e.seen;
-      if (f === 'caught')  return e.caughtNormal;
-      if (f === 'shiny')   return e.caughtShiny;
-      if (f === 'missing') return !e.caughtNormal && !e.caughtShiny;
+    const q = this.searchQuery().trim().toLowerCase();
+    return this.sortedEntries().filter(e => {
+      if (f === 'seen'    && !e.seen)                            return false;
+      if (f === 'caught'  && !e.caughtNormal)                    return false;
+      if (f === 'shiny'   && !e.caughtShiny)                     return false;
+      if (f === 'missing' && (e.caughtNormal || e.caughtShiny))  return false;
+      if (q) {
+        const matchName = e.pokemonName.toLowerCase().includes(q);
+        const matchNum  = String(e.pokemonId).includes(q);
+        if (!matchName && !matchNum) return false;
+      }
       return true;
     });
   });
 
   visibleBoxes = computed<Box[]>(() => {
     const entries = this.filteredEntries();
+    const q = this.searchQuery().trim();
+
+    // When searching, skip box grouping — show a single flat group
+    if (q) {
+      return entries.length
+        ? [{ label: `Resultados (${entries.length})`, entries }]
+        : [];
+    }
+
+    // Box grouping: label each chunk with its position in the FULL (unfiltered, sorted) list
+    const allSorted = this.sortedEntries();
+    const posMap = new Map(allSorted.map((e, i) => [e.pokemonId, i]));
+    const useRegional = this.hasRegionalOrder() && this.sortOrder() === 'game';
     const boxes: Box[] = [];
     for (let i = 0; i < entries.length; i += BOX_SIZE) {
-      const chunk = entries.slice(i, i + BOX_SIZE);
-      const first = chunk[0].pokemonId;
-      const last  = chunk[chunk.length - 1].pokemonId;
-      boxes.push({ label: `Caja ${Math.floor(i / BOX_SIZE) + 1}  (#${first}–#${last})`, entries: chunk });
+      const chunk   = entries.slice(i, i + BOX_SIZE);
+      const origIdx = posMap.get(chunk[0].pokemonId) ?? i;
+      const boxNum  = Math.floor(origIdx / BOX_SIZE) + 1;
+      const first   = useRegional ? chunk[0].entryNumber : chunk[0].pokemonId;
+      const last    = useRegional ? chunk[chunk.length - 1].entryNumber : chunk[chunk.length - 1].pokemonId;
+      boxes.push({ label: `Caja ${boxNum}  (#${first}–#${last})`, entries: chunk });
     }
     return boxes;
   });
@@ -730,6 +848,19 @@ export class ProgressDetailComponent implements OnInit {
         encounters: encArr,
         loading: false,
       });
+    });
+  }
+
+  doCatchAll() {
+    this.confirmCatchAll.set(false);
+    this.catchingAll.set(true);
+    const entries = this.allEntries().map(e => ({ pokemonId: e.pokemonId, pokemonName: e.pokemonName }));
+    this.progressService.catchAll(this.progressId, entries).subscribe({
+      next: () => {
+        this.allEntries.update(list => list.map(e => ({ ...e, seen: true, caughtNormal: true })));
+        this.catchingAll.set(false);
+      },
+      error: () => this.catchingAll.set(false),
     });
   }
 

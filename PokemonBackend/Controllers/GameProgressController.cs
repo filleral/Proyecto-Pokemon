@@ -14,6 +14,7 @@ namespace PokemonBackend.Controllers;
 public class GameProgressController(AppDbContext db) : ControllerBase
 {
     private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private string UserRole => User.FindFirstValue(ClaimTypes.Role) ?? "free";
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -49,6 +50,13 @@ public class GameProgressController(AppDbContext db) : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateProgressRequest req)
     {
+        if (UserRole == "free")
+        {
+            var count = await db.GameProgresses.CountAsync(g => g.UserId == UserId);
+            if (count >= 1)
+                return StatusCode(403, new { message = "free_limit" });
+        }
+
         var progress = new GameProgress
         {
             UserId = UserId,
@@ -133,6 +141,80 @@ public class GameProgressController(AppDbContext db) : ControllerBase
 
         await db.SaveChangesAsync();
         return Ok(new CaughtPokemonDto(req.PokemonId, req.PokemonName, req.Seen, req.CaughtNormal, req.CaughtShiny));
+    }
+
+    [HttpPost("{id}/catchall")]
+    public async Task<IActionResult> CatchAll(int id, [FromBody] List<CatchAllEntry> entries)
+    {
+        var g = await db.GameProgresses.FirstOrDefaultAsync(g => g.Id == id && g.UserId == UserId);
+        if (g is null) return NotFound();
+
+        var existing = await db.CaughtPokemons
+            .Where(c => c.GameProgressId == id)
+            .ToDictionaryAsync(c => c.PokemonId);
+
+        foreach (var entry in entries)
+        {
+            if (existing.TryGetValue(entry.PokemonId, out var record))
+            {
+                record.Seen = true;
+                record.CaughtNormal = true;
+                record.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                db.CaughtPokemons.Add(new CaughtPokemon
+                {
+                    GameProgressId = id,
+                    PokemonId = entry.PokemonId,
+                    PokemonName = entry.PokemonName,
+                    Seen = true,
+                    CaughtNormal = true,
+                    CaughtShiny = false,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(new { caught = entries.Count });
+    }
+
+    [HttpPost("{id}/bulkupsert")]
+    public async Task<IActionResult> BulkUpsert(int id, [FromBody] List<BulkUpsertEntry> entries)
+    {
+        var g = await db.GameProgresses.FirstOrDefaultAsync(g => g.Id == id && g.UserId == UserId);
+        if (g is null) return NotFound();
+
+        var existing = await db.CaughtPokemons
+            .Where(c => c.GameProgressId == id)
+            .ToDictionaryAsync(c => c.PokemonId);
+
+        foreach (var entry in entries)
+        {
+            if (existing.TryGetValue(entry.PokemonId, out var record))
+            {
+                // OR-merge: never downgrade existing flags
+                record.Seen        = record.Seen        || entry.Seen;
+                record.CaughtNormal = record.CaughtNormal || entry.CaughtNormal;
+                record.CaughtShiny = record.CaughtShiny || entry.CaughtShiny;
+                record.UpdatedAt   = DateTime.UtcNow;
+            }
+            else
+            {
+                db.CaughtPokemons.Add(new CaughtPokemon
+                {
+                    GameProgressId = id,
+                    PokemonId      = entry.PokemonId,
+                    PokemonName    = entry.PokemonName,
+                    Seen           = entry.Seen,
+                    CaughtNormal   = entry.CaughtNormal,
+                    CaughtShiny    = entry.CaughtShiny,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(new { upserted = entries.Count });
     }
 
     [HttpDelete("{id}/caught/{pokemonId}")]

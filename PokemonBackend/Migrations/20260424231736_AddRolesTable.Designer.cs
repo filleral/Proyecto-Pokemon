@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PokemonBackend.Data;
 
@@ -11,9 +12,11 @@ using PokemonBackend.Data;
 namespace PokemonBackend.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260424231736_AddRolesTable")]
+    partial class AddRolesTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -291,30 +294,12 @@ namespace PokemonBackend.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Bio")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<bool>("DarkMode")
-                        .HasColumnType("bit");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("FavoriteGame")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("FavoritePokemonId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("FavoritePokemonImageUrl")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("FavoritePokemonName")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("GoogleId")
                         .IsRequired()

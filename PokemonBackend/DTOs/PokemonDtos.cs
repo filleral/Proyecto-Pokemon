@@ -43,3 +43,12 @@ public record UpdateMemberRequest(
     string? Move1, string? Move2, string? Move3, string? Move4,
     int EvHp, int EvAtk, int EvDef, int EvSpAtk, int EvSpDef, int EvSpeed,
     int IvHp, int IvAtk, int IvDef, int IvSpAtk, int IvSpDef, int IvSpeed);
+
+public record ImportMemberDto(
+    int PokemonId, string PokemonName, string PokemonImageUrl, int Slot,
+    string? HeldItem, string? Ability, string? Nature,
+    string? Move1, string? Move2, string? Move3, string? Move4,
+    int EvHp, int EvAtk, int EvDef, int EvSpAtk, int EvSpDef, int EvSpeed,
+    int IvHp, int IvAtk, int IvDef, int IvSpAtk, int IvSpDef, int IvSpeed);
+
+public record ImportTeamRequest(string Name, List<ImportMemberDto> Members);

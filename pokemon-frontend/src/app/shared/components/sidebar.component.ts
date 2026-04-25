@@ -11,19 +11,12 @@ import { AuthService } from '../../core/services/auth.service';
     <aside class="sidebar">
       <div class="sidebar-brand">
         <svg class="pokeball-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" width="32" height="32">
-          <!-- Top half -->
           <path d="M 5,50 A 45,45 0 0,1 95,50 Z" fill="#e63946"/>
-          <!-- Bottom half -->
           <path d="M 5,50 A 45,45 0 0,0 95,50 Z" fill="white"/>
-          <!-- Outer ring -->
           <circle cx="50" cy="50" r="45" fill="none" stroke="#1a1a2e" stroke-width="5"/>
-          <!-- Middle band -->
           <line x1="5" y1="50" x2="95" y2="50" stroke="#1a1a2e" stroke-width="5"/>
-          <!-- Center button outer -->
           <circle cx="50" cy="50" r="14" fill="#1a1a2e"/>
-          <!-- Center button inner -->
           <circle cx="50" cy="50" r="9" fill="white"/>
-          <!-- Center button shine -->
           <circle cx="46" cy="46" r="3" fill="rgba(255,255,255,0.6)"/>
         </svg>
         <span class="brand-text">PokeNexo</span>
@@ -60,12 +53,32 @@ import { AuthService } from '../../core/services/auth.service';
           <span>Equipos</span>
         </a>
 
+        <a routerLink="/items" routerLinkActive="active" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+          <span>Objetos</span>
+        </a>
+
         <a routerLink="/progress" routerLinkActive="active" class="nav-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
             <circle cx="12" cy="12" r="10"/>
             <polyline points="12 6 12 12 16 14"/>
           </svg>
           <span>Progreso</span>
+        </a>
+
+        <a routerLink="/subscription" routerLinkActive="active" class="nav-item premium-nav"
+           *ngIf="!auth.isPremium()">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+          </svg>
+          <div class="premium-nav-text">
+            <span>Hazte Premium</span>
+            <span class="trial-hint">3 días gratis</span>
+          </div>
         </a>
       </nav>
 
@@ -75,7 +88,15 @@ import { AuthService } from '../../core/services/auth.service';
                [alt]="user.name" class="user-avatar"
                referrerpolicy="no-referrer" />
           <div class="user-details">
-            <span class="user-name">{{ user.name }}</span>
+            <div class="user-name-row">
+              <span class="user-name">{{ user.name }}</span>
+              <span class="premium-badge" *ngIf="auth.isPremium()">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="9" height="9">
+                  <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+                </svg>
+                PRO
+              </span>
+            </div>
             <span class="user-email">{{ user.email }}</span>
           </div>
         </div>
@@ -115,6 +136,12 @@ import { AuthService } from '../../core/services/auth.service';
     .nav-item.active { color: white; background: rgba(230,57,70,0.25); }
     .nav-item.active svg { color: #e63946; }
 
+    .premium-nav { color: #fbbf24 !important; margin-top: auto; }
+    .premium-nav:hover { background: rgba(251,191,36,0.1) !important; }
+    .premium-nav.active { background: rgba(251,191,36,0.15) !important; color: #fbbf24 !important; }
+    .premium-nav-text { display: flex; flex-direction: column; gap: 0.05rem; }
+    .trial-hint { font-size: 0.62rem; font-weight: 700; color: rgba(251,191,36,0.6); letter-spacing: 0.2px; }
+
     .sidebar-footer {
       padding: 1rem 0.75rem 0;
       border-top: 1px solid rgba(255,255,255,0.07);
@@ -123,9 +150,18 @@ import { AuthService } from '../../core/services/auth.service';
     .user-info { flex: 1; display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
     .user-avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; object-fit: cover; }
     .user-details { flex: 1; min-width: 0; }
+    .user-name-row { display: flex; align-items: center; gap: 0.35rem; }
     .user-name {
-      display: block; font-size: 0.8rem; font-weight: 600;
+      font-size: 0.8rem; font-weight: 600;
       color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .premium-badge {
+      display: inline-flex; align-items: center; gap: 0.2rem;
+      background: rgba(251,191,36,0.2); color: #fbbf24;
+      border: 1px solid rgba(251,191,36,0.35);
+      padding: 0.1rem 0.35rem; border-radius: 4px;
+      font-size: 0.6rem; font-weight: 800; letter-spacing: 0.3px;
+      flex-shrink: 0;
     }
     .user-email {
       display: block; font-size: 0.7rem; color: rgba(255,255,255,0.4);
@@ -137,6 +173,16 @@ import { AuthService } from '../../core/services/auth.service';
       transition: all 0.2s; flex-shrink: 0;
     }
     .logout-btn:hover { color: #e63946; background: rgba(230,57,70,0.15); }
+
+    /* ── Dark mode ──────────────────────────────────────────────────── */
+    :host-context(html.dark) .sidebar { background: #0d0b1e; }
+    :host-context(html.dark) .sidebar-brand { border-bottom-color: rgba(255,255,255,0.05); }
+    :host-context(html.dark) .nav-item { color: rgba(255,255,255,0.38); }
+    :host-context(html.dark) .nav-item:hover { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.7); }
+    :host-context(html.dark) .nav-item.active { background: rgba(230,57,70,0.2); color: white; }
+    :host-context(html.dark) .sidebar-footer { border-top-color: rgba(255,255,255,0.05); }
+    :host-context(html.dark) .user-email { color: rgba(255,255,255,0.28); }
+    :host-context(html.dark) .logout-btn { color: rgba(255,255,255,0.25); }
   `]
 })
 export class SidebarComponent {

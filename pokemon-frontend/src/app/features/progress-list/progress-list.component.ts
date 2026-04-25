@@ -1,9 +1,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ProgressService } from '../../core/services/progress.service';
 import { GameProgressSummary } from '../../core/models/progress.model';
+import { AuthService } from '../../core/services/auth.service';
+import { SaveImportComponent } from '../save-import/save-import.component';
+import { ProgressOverviewComponent } from '../progress-overview/progress-overview.component';
 
 const GAME_META: Record<string, { label: string; bg: string; logo: string }> = {
   'red':              { label: 'Pokémon Rojo',       bg: '#5a0000', logo: 'game-logos/red.png' },
@@ -50,15 +53,57 @@ export const GAME_VERSIONS = Object.keys(GAME_META);
 @Component({
   selector: 'app-progress-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink, SaveImportComponent, ProgressOverviewComponent],
   template: `
     <div class="page">
       <div class="page-header">
         <h1 class="page-title">Mi progreso</h1>
-        <button class="btn-new" (click)="showForm.set(true)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
-          Nuevo progreso
-        </button>
+        <div class="header-actions">
+          <button class="btn-import-sav" (click)="tryImportSav()" title="Importar partida .sav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="15" height="15">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Importar .sav
+          </button>
+          <button class="btn-new" (click)="tryNewProgress()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
+            Nuevo progreso
+          </button>
+        </div>
+      </div>
+
+      <!-- SAVE IMPORT WIZARD -->
+      <app-save-import
+        *ngIf="showImport()"
+        [canCreateProgress]="auth.isPremium() || progresses().length === 0"
+        (done)="onImportDone($event)">
+      </app-save-import>
+
+      <!-- FREE LIMIT PAYWALL MODAL -->
+      <div class="modal-overlay" *ngIf="showPaywall()" (click)="showPaywall.set(false)">
+        <div class="modal paywall-modal" (click)="$event.stopPropagation()">
+          <div class="paywall-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36">
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+            </svg>
+          </div>
+          <h2 class="paywall-title">Función Premium</h2>
+          <p class="paywall-msg">
+            Con la cuenta <strong>Gratis</strong> solo puedes tener <strong>1 progreso de juego</strong>.<br><br>
+            Hazte Premium y registra todos tus juegos sin límite.<br>
+            <strong>3 días gratis</strong> · desde $1/mes o $10/año (1 mes gratis).
+          </p>
+          <div class="paywall-actions">
+            <button class="btn-cancel" (click)="showPaywall.set(false)">Cancelar</button>
+            <a routerLink="/subscription" class="btn-premium">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+              </svg>
+              Ver Premium
+            </a>
+          </div>
+        </div>
       </div>
 
       <!-- CONFIRM DELETE MODAL -->
@@ -113,61 +158,99 @@ export const GAME_VERSIONS = Object.keys(GAME_META);
         </div>
       </div>
 
-      <!-- PROGRESS CARDS -->
-      <div class="empty-state" *ngIf="progresses().length === 0 && !loading()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" width="64" height="64">
-          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
-          <line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/>
-          <line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/>
-        </svg>
-        <p>No tienes ningún progreso aún.<br>¡Empieza uno nuevo!</p>
+      <!-- TABS -->
+      <div class="view-tabs">
+        <button class="view-tab" [class.active]="view() === 'cards'" (click)="view.set('cards')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+          </svg>
+          Mis partidas
+        </button>
+        <button class="view-tab" [class.active]="view() === 'overview'" (click)="view.set('overview')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/>
+            <line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          Progreso general
+        </button>
       </div>
 
-      <div class="progress-grid" *ngIf="progresses().length">
-        <div class="progress-card" *ngFor="let p of progresses()" (click)="open(p.id)">
-          <div class="card-game-banner" [style.background]="gameMeta(p.gameVersion).bg">
-            <img [src]="gameMeta(p.gameVersion).logo" [alt]="gameMeta(p.gameVersion).label" class="card-game-logo" />
-          </div>
-          <div class="card-body">
-            <div class="card-trainer">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
-              </svg>
-              {{ p.trainerName }}
-            </div>
-            <div class="card-date">Iniciado el {{ p.startedAt | date:'dd/MM/yyyy' }}</div>
-            <div class="card-stats">
-              <div class="card-stat">
-                <span class="stat-num seen">{{ p.totalSeen }}</span>
-                <span class="stat-lbl">👁 Vistos</span>
-              </div>
-              <div class="card-stat">
-                <span class="stat-num">{{ p.totalCaught }}</span>
-                <span class="stat-lbl">✓ Captd.</span>
-              </div>
-              <div class="card-stat">
-                <span class="stat-num shiny">{{ p.totalShiny }}</span>
-                <span class="stat-lbl">✨ Shiny</span>
-              </div>
-            </div>
-          </div>
-          <button class="card-delete" (click)="deleteProgress($event, p.id)" title="Eliminar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-              <path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
-            </svg>
-          </button>
+      <!-- MY SAVES VIEW -->
+      <ng-container *ngIf="view() === 'cards'">
+        <div class="empty-state" *ngIf="progresses().length === 0 && !loading()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" width="64" height="64">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+            <line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/>
+          </svg>
+          <p>No tienes ningún progreso aún.<br>¡Empieza uno nuevo!</p>
         </div>
-      </div>
+
+        <div class="progress-grid" *ngIf="progresses().length">
+          <div class="progress-card" *ngFor="let p of progresses()" (click)="open(p.id)">
+            <div class="card-game-banner" [style.background]="gameMeta(p.gameVersion).bg">
+              <img [src]="gameMeta(p.gameVersion).logo" [alt]="gameMeta(p.gameVersion).label" class="card-game-logo" />
+            </div>
+            <div class="card-body">
+              <div class="card-trainer">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                {{ p.trainerName }}
+              </div>
+              <div class="card-date">Iniciado el {{ p.startedAt | date:'dd/MM/yyyy' }}</div>
+              <div class="card-stats">
+                <div class="card-stat">
+                  <span class="stat-num seen">{{ p.totalSeen }}</span>
+                  <span class="stat-lbl">👁 Vistos</span>
+                </div>
+                <div class="card-stat">
+                  <span class="stat-num">{{ p.totalCaught }}</span>
+                  <span class="stat-lbl">✓ Captd.</span>
+                </div>
+                <div class="card-stat">
+                  <span class="stat-num shiny">{{ p.totalShiny }}</span>
+                  <span class="stat-lbl">✨ Shiny</span>
+                </div>
+              </div>
+            </div>
+            <button class="card-delete" (click)="deleteProgress($event, p.id)" title="Eliminar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+                <path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </ng-container>
+
+      <!-- GENERAL OVERVIEW -->
+      <app-progress-overview
+        *ngIf="view() === 'overview'"
+        [progresses]="progresses()">
+      </app-progress-overview>
+
     </div>
   `,
   styles: [`
     .page { padding: 2rem; max-width: 1100px; margin: 0 auto; }
     .page-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:2rem; }
     .page-title { font-size:1.6rem;font-weight:800;color:#1a1a2e;margin:0; }
+    .header-actions { display:flex;align-items:center;gap:.6rem; }
     .btn-new { display:flex;align-items:center;gap:.4rem;padding:.55rem 1.1rem;background:#e63946;color:white;border:none;border-radius:10px;font-size:.88rem;font-weight:700;cursor:pointer;transition:background .2s; }
     .btn-new:hover { background:#c1121f; }
+    .btn-import-sav { display:flex;align-items:center;gap:.4rem;padding:.55rem 1.1rem;background:#f0f0f0;color:#444;border:none;border-radius:10px;font-size:.88rem;font-weight:700;cursor:pointer;transition:all .2s; }
+    .btn-import-sav:hover { background:#e0e0e0; }
+
+    /* TABS */
+    .view-tabs { display:flex;gap:.35rem;margin-bottom:1.5rem;background:#f4f4f4;padding:.3rem;border-radius:12px;width:fit-content; }
+    .view-tab { display:flex;align-items:center;gap:.4rem;padding:.45rem .9rem;border:none;border-radius:9px;font-size:.84rem;font-weight:700;cursor:pointer;color:#888;background:transparent;transition:all .2s; }
+    .view-tab:hover { color:#555; }
+    .view-tab.active { background:white;color:#1a1a2e;box-shadow:0 1px 4px rgba(0,0,0,.1); }
 
     /* MODAL */
     .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:200; }
@@ -210,6 +293,15 @@ export const GAME_VERSIONS = Object.keys(GAME_META);
     .card-delete { position:absolute;top:.6rem;right:.6rem;background:rgba(0,0,0,.06);border:none;border-radius:8px;padding:.35rem;cursor:pointer;color:#bbb;transition:all .2s; }
     .card-delete:hover { background:rgba(230,57,70,.1);color:#e63946; }
 
+    /* PAYWALL */
+    .paywall-modal { max-width:400px;text-align:center;padding:2.25rem 2rem; }
+    .paywall-icon { color:#fbbf24;margin-bottom:1rem; }
+    .paywall-title { font-size:1.15rem;font-weight:800;color:#1a1a2e;margin:0 0 .6rem; }
+    .paywall-msg { font-size:.85rem;color:#666;line-height:1.6;margin:0 0 1.75rem; }
+    .paywall-actions { display:flex;gap:.75rem;justify-content:center; }
+    .btn-premium { display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1.4rem;background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#1a1a2e;border:none;border-radius:10px;font-size:.88rem;font-weight:800;cursor:pointer;text-decoration:none;transition:all .2s; }
+    .btn-premium:hover { transform:translateY(-1px);box-shadow:0 4px 14px rgba(251,191,36,.4); }
+
     /* CONFIRM DELETE */
     .confirm-modal { max-width:380px;text-align:center;padding:2.25rem 2rem; }
     .confirm-icon { width:64px;height:64px;border-radius:50%;background:rgba(230,57,70,.1);display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;color:#e63946; }
@@ -222,10 +314,14 @@ export const GAME_VERSIONS = Object.keys(GAME_META);
 export class ProgressListComponent implements OnInit {
   private progressService = inject(ProgressService);
   private router = inject(Router);
+  auth = inject(AuthService);
 
   progresses = signal<GameProgressSummary[]>([]);
   loading = signal(true);
+  view = signal<'cards' | 'overview'>('cards');
   showForm = signal(false);
+  showPaywall = signal(false);
+  showImport = signal(false);
   saving = signal(false);
   confirmDeleteId = signal<number | null>(null);
 
@@ -241,6 +337,14 @@ export class ProgressListComponent implements OnInit {
       this.progresses.set(list);
       this.loading.set(false);
     });
+  }
+
+  tryNewProgress() {
+    if (!this.auth.isPremium() && this.progresses().length >= 1) {
+      this.showPaywall.set(true);
+    } else {
+      this.showForm.set(true);
+    }
   }
 
   closeForm() {
@@ -265,6 +369,21 @@ export class ProgressListComponent implements OnInit {
   deleteProgress(e: Event, id: number) {
     e.stopPropagation();
     this.confirmDeleteId.set(id);
+  }
+
+  tryImportSav() {
+    if (!this.auth.isPremium()) {
+      this.showPaywall.set(true);
+    } else {
+      this.showImport.set(true);
+    }
+  }
+
+  onImportDone(progressId: number | null) {
+    this.showImport.set(false);
+    if (progressId !== null) {
+      this.progressService.getAll().subscribe(list => this.progresses.set(list));
+    }
   }
 
   confirmDelete() {

@@ -14,6 +14,7 @@ namespace PokemonBackend.Controllers;
 public class TeamsController(AppDbContext db) : ControllerBase
 {
     private int UserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private string UserRole => User.FindFirstValue(ClaimTypes.Role) ?? "free";
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
@@ -67,6 +68,48 @@ public class TeamsController(AppDbContext db) : ControllerBase
         return Ok(team);
     }
 
+    [HttpPost("import")]
+    public async Task<IActionResult> Import([FromBody] ImportTeamRequest req)
+    {
+        if (req.Members.Count > 6)
+            return BadRequest(new { message = "Max 6 members per team" });
+
+        var team = new PokemonTeam { UserId = UserId, Name = req.Name.Trim() };
+        db.Teams.Add(team);
+        await db.SaveChangesAsync();
+
+        foreach (var m in req.Members)
+        {
+            team.Members.Add(new TeamMember
+            {
+                PokemonTeamId = team.Id,
+                PokemonId     = m.PokemonId,
+                PokemonName   = m.PokemonName,
+                PokemonImageUrl = m.PokemonImageUrl,
+                Slot     = m.Slot,
+                HeldItem = m.HeldItem,
+                Ability  = m.Ability,
+                Nature   = m.Nature,
+                Move1    = m.Move1, Move2 = m.Move2, Move3 = m.Move3, Move4 = m.Move4,
+                EvHp     = Math.Clamp(m.EvHp,    0, 252),
+                EvAtk    = Math.Clamp(m.EvAtk,   0, 252),
+                EvDef    = Math.Clamp(m.EvDef,   0, 252),
+                EvSpAtk  = Math.Clamp(m.EvSpAtk, 0, 252),
+                EvSpDef  = Math.Clamp(m.EvSpDef, 0, 252),
+                EvSpeed  = Math.Clamp(m.EvSpeed,  0, 252),
+                IvHp     = Math.Clamp(m.IvHp,    0, 31),
+                IvAtk    = Math.Clamp(m.IvAtk,   0, 31),
+                IvDef    = Math.Clamp(m.IvDef,   0, 31),
+                IvSpAtk  = Math.Clamp(m.IvSpAtk, 0, 31),
+                IvSpDef  = Math.Clamp(m.IvSpDef, 0, 31),
+                IvSpeed  = Math.Clamp(m.IvSpeed,  0, 31),
+            });
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(team);
+    }
+
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
@@ -80,6 +123,9 @@ public class TeamsController(AppDbContext db) : ControllerBase
     [HttpPut("{id:int}/members/{memberId:int}")]
     public async Task<IActionResult> UpdateMember(int id, int memberId, [FromBody] UpdateMemberRequest req)
     {
+        if (UserRole == "free")
+            return StatusCode(403, new { message = "premium_required" });
+
         var member = await db.TeamMembers
             .Include(m => m.Team)
             .FirstOrDefaultAsync(m => m.Id == memberId && m.PokemonTeamId == id && m.Team!.UserId == UserId);

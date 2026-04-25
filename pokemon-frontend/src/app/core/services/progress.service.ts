@@ -59,9 +59,37 @@ export class ProgressService {
     return this.http.delete<void>(`${this.base}/${id}/reset`);
   }
 
-  getPokedex(gameVersion: string): Observable<PokedexEntry[]> {
-    const dexNames = GAME_POKEDEX[gameVersion] ?? ['kanto'];
+  catchAll(progressId: number, entries: { pokemonId: number; pokemonName: string }[]): Observable<{ caught: number }> {
+    return this.http.post<{ caught: number }>(`${this.base}/${progressId}/catchall`, entries);
+  }
 
+  bulkUpsert(progressId: number, entries: { pokemonId: number; pokemonName: string; seen: boolean; caughtNormal: boolean; caughtShiny: boolean }[]): Observable<{ upserted: number }> {
+    return this.http.post<{ upserted: number }>(`${this.base}/${progressId}/bulkupsert`, entries);
+  }
+
+  getPokedex(gameVersion: string): Observable<PokedexEntry[]> {
+    const config = GAME_POKEDEX[gameVersion] ?? 151;
+
+    // National dex with generation limit
+    if (typeof config === 'number') {
+      const limit = config;
+      return this.http.get<PokedexApiResponse>(`${this.pokeApi}/pokedex/national`).pipe(
+        map(res =>
+          res.pokemon_entries
+            .filter(e => e.entry_number <= limit)
+            .map(e => ({
+              pokemonId:   this.extractId(e.pokemon_species.url),
+              pokemonName: e.pokemon_species.name,
+              entryNumber: e.entry_number,
+            }))
+            .sort((a, b) => a.entryNumber - b.entryNumber)
+        ),
+        catchError(() => of([] as PokedexEntry[]))
+      );
+    }
+
+    // Regional dex(es): fetch and merge
+    const dexNames = config;
     const fetchOne = (name: string): Observable<PokedexEntry[]> =>
       this.http.get<PokedexApiResponse>(`${this.pokeApi}/pokedex/${name}`).pipe(
         map(res => res.pokemon_entries.map(e => ({
@@ -78,14 +106,13 @@ export class ProgressService {
       );
     }
 
-    // Multi-dex games (X/Y): merge all dexes, deduplicate by pokemonId, sort by national ID
+    // Multi-dex: merge, deduplicate, keep regional order (entryNumber from first dex wins)
     return forkJoin(dexNames.map(fetchOne)).pipe(
       map(all => {
         const seen = new Set<number>();
         return all.flat()
           .filter(e => { if (seen.has(e.pokemonId)) return false; seen.add(e.pokemonId); return true; })
-          .sort((a, b) => a.pokemonId - b.pokemonId)
-          .map((e, i) => ({ ...e, entryNumber: i + 1 }));
+          .sort((a, b) => a.entryNumber - b.entryNumber);
       })
     );
   }
